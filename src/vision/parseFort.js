@@ -18,6 +18,9 @@ import { loadCv } from './opencv.js';
 import { detect } from './pipeline.js';
 import { buildLevel, checkLevel, pageTransform } from './geometry.js';
 import { loadSettings } from './settings.js';
+import { findShapes } from './findShapes.js';
+import { decideShapes, shapesToLevel, layoutToLevel } from './hybridLevel.js';
+import { CLASSIFY_MAX_SHAPES } from '../shared/classify.js';
 
 const MAX_INPUT_W = 1280; // plan: photos arrive at max 1280 px wide
 
@@ -31,7 +34,7 @@ export function ready() {
  *   pageToWorld: { sx: number, sy: number, ox: number, oy: number }, warnings: string[], timings: object }>}
  *   page: the clean flattened drawing; worldX = ox + pageX·sx, worldY = oy + pageY·sy
  */
-export async function parseFort(imageSource, options = {}) {
+export async function parseFortOpenCV(imageSource, options = {}) {
   const t0 = performance.now();
   const cv = await loadCv();
   const settings = options.settings ?? loadSettings();
@@ -75,6 +78,7 @@ export async function parseFort(imageSource, options = {}) {
     imageW: imageData.width,
     imageH: imageData.height,
     paperFound: found.paperFound,
+    detector: 'opencv',
   });
   if (!found.paperFound) warnings.push('Paper edges not found: used the whole photo');
 
@@ -92,6 +96,95 @@ export async function parseFort(imageSource, options = {}) {
 
   const timings = { decode: t1 - t0, detect: t2 - t1, total: performance.now() - t0 };
   return { level, debugCanvas, page, pageToWorld, debug, warnings, timings };
+}
+
+/**
+ * Team Fix #2 hybrid (OpenCV shapes + Claude colours via /api/classify, or Claude's own
+ * layout via /api/layout for 0 or >60 shapes) is OPT-IN: parseFort(img, { detector: 'hybrid' }).
+ * Default stays the per-colour OpenCV detector, because the brief's single ink mask merges
+ * touching blocks of different colours into one shape (see /fixtures/hybrid-check.html), which
+ * made real forts worse. ANY hybrid problem (no key, no internet, timeout, invalid level, no pig)
+ * falls back to parseFortOpenCV. result.level.meta.detector says which path produced the level.
+ */
+export async function parseFort(imageSource, options = {}) {
+  if (options.detector === 'hybrid') {
+    try {
+      return await parseFortHybrid(imageSource, options);
+    } catch (err) {
+      console.info('[vision] hybrid detector not used:', err?.message || err);
+    }
+  }
+  return parseFortOpenCV(imageSource, options);
+}
+
+let statusCache = null; // { enabled, at }
+async function claudeEnabled() {
+  if (statusCache && performance.now() - statusCache.at < 60_000) return statusCache.enabled;
+  let enabled = false;
+  try {
+    const r = await fetch('/api/claude/status', { signal: AbortSignal.timeout(2000) });
+    enabled = r.ok && (await r.json()).enabled === true;
+  } catch { /* server or endpoint missing */ }
+  statusCache = { enabled, at: performance.now() };
+  return enabled;
+}
+
+async function postJson(url, body, ms) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(ms),
+  });
+  if (!r.ok) throw new Error(`${url} answered ${r.status}`);
+  const json = await r.json();
+  if (json.error) throw new Error(`${url}: ${json.error}`);
+  return json;
+}
+
+async function parseFortHybrid(imageSource, options) {
+  const t0 = performance.now();
+  if (!(await claudeEnabled())) throw new Error('Claude not configured on the server');
+  const cv = await loadCv();
+  const settings = options.settings ?? loadSettings();
+  const imageData = await toImageData(imageSource);
+  const fs = findShapes(cv, imageData, settings);
+  const jpeg = (c) => c.toDataURL('image/jpeg', 0.85);
+  const meta = { imageW: imageData.width, imageH: imageData.height, paperFound: fs.paperFound };
+
+  let level;
+  let claudeMs = 0;
+  if (fs.shapes.length >= 1 && fs.shapes.length <= CLASSIFY_MAX_SHAPES) {
+    const t = performance.now();
+    const res = await postJson('/api/classify', { annotated: jpeg(fs.canvases.annotated), clean: jpeg(fs.canvases.clean), count: fs.shapes.length }, 15000);
+    claudeMs = performance.now() - t;
+    level = shapesToLevel(decideShapes(fs.shapes, res.shapes), fs.pageW, fs.pageH, { ...meta, detector: 'hybrid' });
+  } else {
+    const t = performance.now();
+    const res = await postJson('/api/layout', { clean: jpeg(fs.canvases.clean) }, 15000);
+    claudeMs = performance.now() - t;
+    level = layoutToLevel(res, fs.pageW, fs.pageH, { ...meta, detector: 'claude' });
+  }
+
+  const check = checkLevel(level);
+  if (!check.ok) throw new Error(`hybrid level rejected: ${check.message}`);
+
+  const copy = (c) => {
+    const d = document.createElement('canvas');
+    d.width = c.width;
+    d.height = c.height;
+    d.getContext('2d').drawImage(c, 0, 0);
+    return d;
+  };
+  return {
+    level,
+    debugCanvas: fs.canvases.annotated,
+    page: fs.canvases.clean,
+    pageToWorld: pageTransform(fs.pageW, fs.pageH),
+    debug: { overlay: copy(fs.canvases.annotated), masks: { ink: fs.canvases.ink } },
+    warnings: fs.paperFound ? [] : ['Paper edges not found: used the whole photo'],
+    timings: { claude: claudeMs, total: performance.now() - t0 },
+  };
 }
 
 /** An Error the display can show to players as-is. */

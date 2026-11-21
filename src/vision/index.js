@@ -1,5 +1,6 @@
 // Public entry point for the vision module. Import from here:
 //   import { parseFort, ready } from './src/vision/index.js';
-export { parseFort, ready, visionError } from './parseFort.js';
+export { parseFort, parseFortOpenCV, ready, visionError } from './parseFort.js';
+export { findShapes } from './findShapes.js';
 // P4 bonus: draw-your-own-bird -> { bird: { polygon, area, pointiness }, debugCanvas }
 export { parseBird } from './parseBird.js';
