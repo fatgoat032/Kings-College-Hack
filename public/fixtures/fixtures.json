@@ -24,6 +24,12 @@
     "note": "No green pig: must fail with a friendly error"
   },
   {
+    "name": "digital-ipad",
+    "image": "digital-ipad.svg",
+    "expected": "digital-ipad.expected.json",
+    "note": "iPad Notes-style digital drawing: no paper edges, Apple pen colours"
+  },
+  {
     "name": "bird-round",
     "type": "bird",
     "image": "bird-round.svg",

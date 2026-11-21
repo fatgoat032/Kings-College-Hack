@@ -124,12 +124,57 @@ for (const b of birds) {
   fs.writeFileSync(`${OUT}/${b.name}.expected.json`, JSON.stringify(b.exp, null, 2) + '\n');
 }
 
+
+// ---- Digital drawing (iPad Notes / whiteboard export): no paper edges, pen strokes ----
+const DIG_W = 1600;
+const DIG_H = 1200;
+const APPLE = { wood: '#1c1c1e', ice: '#0a84ff', stone: '#8e8e93', tnt: '#ff453a', pig: '#30d158' };
+// pen-drawn rectangles: an outline stroke plus a scribble fill, slightly wobbly like a finger/pencil
+function penRect(b) {
+  const x0 = b.x - b.w / 2, y0 = b.y - b.h / 2, x1 = b.x + b.w / 2, y1 = b.y + b.h / 2;
+  const c = APPLE[b.m];
+  return `<path d="M${x0} ${y0 + 2} L${x1 - 1} ${y0} L${x1} ${y1 - 2} L${x0 + 2} ${y1} Z" fill="${c}" stroke="${c}" stroke-width="10" stroke-linejoin="round"/>`;
+}
+const DIG_FORT = {
+  blocks: [
+    { m: 'wood', x: 520, y: 1010, w: 34, h: 300 },
+    { m: 'wood', x: 900, y: 1010, w: 34, h: 300 },
+    { m: 'wood', x: 710, y: 842, w: 470, h: 34 },
+    { m: 'ice', x: 600, y: 745, w: 30, h: 160 },
+    { m: 'ice', x: 820, y: 745, w: 30, h: 160 },
+    { m: 'tnt', x: 710, y: 610, w: 100, h: 100 },
+    { m: 'stone', x: 1250, y: 1040, w: 70, h: 240 },
+  ],
+  pigs: [
+    { x: 710, y: 1110, r: 48 },
+    { x: 1250, y: 860, r: 42 },
+  ],
+};
+const digSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${DIG_W}" height="${DIG_H}" viewBox="0 0 ${DIG_W} ${DIG_H}">
+  <rect width="${DIG_W}" height="${DIG_H}" fill="#ffffff"/>
+  ${DIG_FORT.blocks.map(penRect).join('\n  ')}
+  ${DIG_FORT.pigs.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="${p.r}" fill="${APPLE.pig}"/><circle cx="${p.x - p.r / 3}" cy="${p.y - p.r / 4}" r="5" fill="#111"/><circle cx="${p.x + p.r / 3}" cy="${p.y - p.r / 4}" r="5" fill="#111"/>`).join('\n  ')}
+</svg>
+`;
+{
+  const map = pageToWorld(DIG_W, DIG_H);
+  const exp = {
+    version: 1,
+    blocks: DIG_FORT.blocks.map((b, i) => ({ id: `b${i + 1}`, material: b.m, x: Math.round(map.x(b.x)), y: Math.round(map.y(b.y)), w: Math.round(b.w * map.scale), h: Math.round(b.h * map.scale), angle: 0 })),
+    pigs: DIG_FORT.pigs.map((p, i) => ({ id: `p${i + 1}`, x: Math.round(map.x(p.x)), y: Math.round(map.y(p.y)), r: clampPigR(Math.round(p.r * map.scale)) })),
+    meta: { source: 'expected' },
+  };
+  fs.writeFileSync(`${OUT}/digital-ipad.svg`, digSvg);
+  fs.writeFileSync(`${OUT}/digital-ipad.expected.json`, JSON.stringify(exp, null, 2) + '\n');
+}
+
 // Manifest: keep real photos already listed, replace synthetic entries.
 const manifestPath = `${OUT}/fixtures.json`;
 const old = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : [];
-const real = old.filter((f) => !f.name.startsWith('synthetic-') && !f.name.startsWith('bird-'));
+const real = old.filter((f) => !f.name.startsWith('synthetic-') && !f.name.startsWith('bird-') && f.name !== 'digital-ipad');
 const manifest = [
   ...cases.map((c) => ({ name: c.name, image: `${c.name}.svg`, expected: `${c.name}.expected.json`, note: c.note })),
+  { name: 'digital-ipad', image: 'digital-ipad.svg', expected: 'digital-ipad.expected.json', note: 'iPad Notes-style digital drawing: no paper edges, Apple pen colours' },
   ...birds.map((b) => ({ name: b.name, type: 'bird', image: `${b.name}.svg`, expected: `${b.name}.expected.json`, note: b.note })),
   ...real,
 ];
