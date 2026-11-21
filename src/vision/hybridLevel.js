@@ -99,3 +99,88 @@ export function layoutToLevel(layout, pageW, pageH, meta) {
 }
 
 export { validateLevel };
+
+// ---------------------------------------------------------------------------
+// Auto-pick (17:24 brief): clean up Claude's own layout, then choose a candidate.
+// ---------------------------------------------------------------------------
+
+const SNAP = (8 * Math.PI) / 180;
+
+/** Rotated block -> its axis-aligned half extents. */
+function halfExtents(b) {
+  const c = Math.abs(Math.cos(b.angle || 0));
+  const s = Math.abs(Math.sin(b.angle || 0));
+  return { hx: (b.w * c + b.h * s) / 2, hy: (b.w * s + b.h * c) / 2 };
+}
+
+/**
+ * Claude-only clean-up: snap angles within 8° of flat/upright, settle every block onto the
+ * ground or the block below it (bottom-up), then drop pigs onto the surface under them.
+ * Returns a new level; rect blocks only (that's all /api/layout produces).
+ */
+export function cleanLayout(level) {
+  const out = structuredClone(level);
+  for (const b of out.blocks) {
+    if (b.shape === 'poly') continue;
+    const k = Math.round((b.angle || 0) / (Math.PI / 2));
+    if (Math.abs((b.angle || 0) - k * (Math.PI / 2)) <= SNAP) b.angle = k * (Math.PI / 2) === 0 ? 0 : k * (Math.PI / 2);
+  }
+  const rects = out.blocks.filter((b) => b.shape !== 'poly');
+  // lowest first, so supports are settled before what rests on them
+  rects.sort((a, b) => b.y + halfExtents(b).hy - (a.y + halfExtents(a).hy));
+  const settled = [];
+  const surfaceUnder = (x0, x1, yTop) => {
+    let surface = WORLD.groundY;
+    for (const s of settled) {
+      const e = halfExtents(s);
+      const overlaps = x1 > s.x - e.hx + 1 && x0 < s.x + e.hx - 1;
+      const top = s.y - e.hy;
+      if (overlaps && top >= yTop - 1 && top < surface) surface = top;
+    }
+    return surface;
+  };
+  for (const b of rects) {
+    const e = halfExtents(b);
+    const surface = surfaceUnder(b.x - e.hx, b.x + e.hx, b.y - e.hy);
+    b.y = r1(surface - e.hy);
+    settled.push(b);
+  }
+  for (const p of out.pigs) {
+    const surface = surfaceUnder(p.x - p.r * 0.6, p.x + p.r * 0.6, p.y - p.r);
+    p.y = r1(surface - p.r);
+  }
+  return out;
+}
+
+/** Average confidence and completeness of a /api/classify answer for `count` shapes. */
+export function classifyStats(answer, count) {
+  const byN = new Map((answer || []).map((a) => [a.n, a]));
+  let sum = 0;
+  for (let n = 1; n <= count; n++) sum += byN.get(n)?.confidence ?? 0;
+  return {
+    complete: count > 0 && Array.from({ length: count }, (_, i) => byN.has(i + 1)).every(Boolean),
+    avgConfidence: count ? Math.round((sum / count) * 1000) / 1000 : 0,
+  };
+}
+
+/**
+ * The brief's pick rule. Each candidate: { ok, level?, complete?, avgConfidence? } or undefined.
+ * @returns {{ chose: 'hybrid'|'claude'|'opencv', reason: string }}
+ */
+export function pickCandidate({ hybrid, claude }) {
+  const hOk = !!hybrid?.ok;
+  const cOk = !!claude?.ok;
+  if (hOk && cOk) {
+    const hn = hybrid.level.blocks.length;
+    const cn = claude.level.blocks.length;
+    const close = Math.abs(hn - cn) <= 0.3 * Math.max(cn, 1);
+    if (hybrid.complete && hybrid.avgConfidence >= 0.7 && close) {
+      return { chose: 'hybrid', reason: `hybrid complete, confidence ${hybrid.avgConfidence}, ${hn} blocks vs Claude ${cn}` };
+    }
+    const why = !hybrid.complete ? 'Claude skipped some shapes' : hybrid.avgConfidence < 0.7 ? `confidence ${hybrid.avgConfidence} < 0.7` : `${hn} blocks vs Claude-only ${cn} (more than ±30%)`;
+    return { chose: 'claude', reason: `hybrid not trusted: ${why}` };
+  }
+  if (hOk) return { chose: 'hybrid', reason: 'Claude-only layout failed' };
+  if (cOk) return { chose: 'claude', reason: 'hybrid failed' };
+  return { chose: 'opencv', reason: 'both Claude paths failed' };
+}

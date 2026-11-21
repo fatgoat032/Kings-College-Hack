@@ -161,3 +161,31 @@ test('hybrid: shapes and layout become valid levels (rect + poly + pig)', () => 
   assert.deepEqual(validateLevel(lay), { ok: true, errors: [] });
   assert.equal(lay.blocks[0].material, 'ice');
 });
+
+import { cleanLayout, classifyStats, pickCandidate } from '../hybridLevel.js';
+
+test('auto: cleanLayout snaps, settles blocks on ground/blocks, drops pigs', () => {
+  const lv = cleanLayout({ version: 1, meta: {}, blocks: [
+    { id: 'b1', material: 'wood', shape: 'rect', x: 1100, y: 700, w: 200, h: 20, angle: 0.1 }, // floating beam, 5.7°
+    { id: 'b2', material: 'wood', shape: 'rect', x: 1100, y: 790, w: 20, h: 100, angle: 0 },   // pillar, 10 above ground
+  ], pigs: [{ id: 'p1', x: 1300, y: 600, r: 20 }, { id: 'p2', x: 1100, y: 650, r: 20 }] });
+  const [beam, pillar] = [lv.blocks.find((b) => b.id === 'b1'), lv.blocks.find((b) => b.id === 'b2')];
+  assert.equal(beam.angle, 0);
+  assert.equal(pillar.y + 50, 850, 'pillar on the ground');
+  assert.equal(beam.y + 10, pillar.y - 50, 'beam rests on the pillar');
+  assert.equal(lv.pigs[0].y + 20, 850, 'pig dropped to ground');
+  assert.equal(lv.pigs[1].y + 20, beam.y - 10, 'pig dropped onto the beam');
+  assert.deepEqual(validateLevel(lv).ok, true);
+});
+
+test('auto: classifyStats + pickCandidate follow the brief', () => {
+  assert.deepEqual(classifyStats([{ n: 1, confidence: 0.9 }, { n: 2, confidence: 0.7 }], 2), { complete: true, avgConfidence: 0.8 });
+  assert.equal(classifyStats([{ n: 1, confidence: 0.9 }], 2).complete, false);
+  const L = (n) => ({ blocks: Array.from({ length: n }, () => ({})), pigs: [{}] });
+  assert.equal(pickCandidate({ hybrid: { ok: true, level: L(7), complete: true, avgConfidence: 0.8 }, claude: { ok: true, level: L(6) } }).chose, 'hybrid');
+  assert.equal(pickCandidate({ hybrid: { ok: true, level: L(7), complete: true, avgConfidence: 0.6 }, claude: { ok: true, level: L(6) } }).chose, 'claude');
+  assert.equal(pickCandidate({ hybrid: { ok: true, level: L(12), complete: true, avgConfidence: 0.9 }, claude: { ok: true, level: L(6) } }).chose, 'claude');
+  assert.equal(pickCandidate({ hybrid: { ok: true, level: L(7), complete: false, avgConfidence: 0.9 }, claude: { ok: false } }).chose, 'hybrid');
+  assert.equal(pickCandidate({ hybrid: { ok: false }, claude: { ok: true, level: L(6) } }).chose, 'claude');
+  assert.equal(pickCandidate({ hybrid: { ok: false }, claude: { ok: false } }).chose, 'opencv');
+});
