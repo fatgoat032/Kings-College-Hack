@@ -66,7 +66,7 @@ export function createScanDebug() {
   }
 
   /** Record a scan. `result` is parseFort's result or the thrown error. */
-  function record({ photo, result, error }) {
+  function record({ photo, result, error, detector }) {
     const pictures = [];
     if (photo) {
       const img = new Image();
@@ -84,6 +84,9 @@ export function createScanDebug() {
     }
     if (error) summary = `ERROR: ${error.message}${summary ? ` · ${summary}` : ''}`;
     if (result?.warnings?.length) summary += ` · warnings: ${result.warnings.join('; ')}`;
+    const used = level?.meta?.detector;
+    if (detector || used) summary += ` · detector: ${used ?? '?'}${detector && used && detector !== used ? ` (asked ${detector}, fell back)` : ''}`;
+    if (result?.timings?.claude) summary += ` · Claude ${Math.round(result.timings.claude)} ms`;
     if (result?.timings?.total) summary += ` · ${Math.round(result.timings.total)} ms`;
     last = { when: new Date().toLocaleTimeString(), pictures, summary };
     console.info('[scan]', summary, result || error);

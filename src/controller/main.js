@@ -55,6 +55,7 @@ function start(code, name) {
   };
   const callbacks = {
     onAim: (a) => net.send(EVENTS.AIM, a),
+    onGrip: (g) => net.send(EVENTS.GRIP, g),
     onLaunch: (a) => net.send(EVENTS.LAUNCH, { ...a, bird: 'red' }),
     onTap: () => {
       net.send(EVENTS.ABILITY, {});
@@ -74,9 +75,39 @@ function start(code, name) {
     ...callbacks,
     onFeedback: (kind) => {
       if (kind === 'launched') flash('LAUNCHED!');
-      else if (kind === 'noswing') flash('SWING IT!');
+      else if (kind === 'nopull') flash('PULL BACK!');
     },
   });
+  net.on(EVENTS.POWER_UPDATE, ({ power } = {}) => motionPad.setWebcamPower(power));
+
+  // motion settings, remembered per phone
+  let flip = store.get('angry-sketches:flip') === '1';
+  let pullMode = store.get('angry-sketches:pull') || 'auto';
+  motionPad.setFlip(flip);
+  motionPad.setPullMode(pullMode);
+  $('flipBtn').onclick = () => {
+    flip = !flip;
+    store.set('angry-sketches:flip', flip ? '1' : '0');
+    motionPad.setFlip(flip);
+    render();
+  };
+  $('pullBtn').onclick = () => {
+    pullMode = { auto: 'webcam', webcam: 'tilt', tilt: 'auto' }[pullMode] || 'auto';
+    store.set('angry-sketches:pull', pullMode);
+    motionPad.setPullMode(pullMode);
+    render();
+  };
+  // aim test (lobby): live angle + pull on the phone, to check the sensors before playing
+  let testing = false;
+  $('testBtn').onclick = async () => {
+    if (needsPermission() && !motionGranted) motionGranted = await requestMotionPermission();
+    testing = true;
+    render();
+  };
+  $('testDone').onclick = () => {
+    testing = false;
+    render();
+  };
   document.addEventListener('pointerdown', unlock, { once: true });
 
   // mode: 'motion' when sensors work (HTTPS + permission), else 'drag'. Remembered per phone.
@@ -106,6 +137,7 @@ function start(code, name) {
     }
   }, 1000);
   const pad = {
+    setTest: (v) => motionPad.setTestMode(v),
     resize: () => { dragPad.resize(); motionPad.resize(); },
     setEnabled: (v) => { dragPad.setEnabled(v && mode === 'drag'); motionPad.setEnabled(v && mode === 'motion' && motionGranted); },
     setFlying: (v) => { dragPad.setFlying(v && mode === 'drag'); motionPad.setFlying(v && mode === 'motion'); },
@@ -164,6 +196,11 @@ function start(code, name) {
         $('motionBtn').hidden = !(useMotion && !motionGranted);
         $('modeBtn').hidden = !motionSupported();
         $('modeBtn').textContent = useMotion ? 'Use drag instead' : 'Use motion slingshot';
+        $('pullBtn').hidden = !useMotion;
+        $('pullBtn').textContent = `Pull: ${pullMode}`;
+        $('flipBtn').hidden = !useMotion;
+        $('flipBtn').textContent = flip ? 'Aim: flipped' : 'Flip aim';
+        $('testDone').hidden = !testing;
         pad.resize();
       }
     };
@@ -176,6 +213,7 @@ function start(code, name) {
       $('uploadLabel').hidden = !(scan || upload);
       $('nextBtn').hidden = !next;
       $('nextBtn').textContent = next;
+      $('testBtn').hidden = !(state.phase === 'lobby' && motionSupported());
       $('scores').hidden = !scores;
       if (scores) {
         $('scores').innerHTML = ['A', 'B']
@@ -186,6 +224,16 @@ function start(code, name) {
 
     pad.setEnabled(false);
     pad.setFlying(false);
+    pad.setTest(false);
+
+    if (testing && state.phase === 'lobby') {
+      mode = 'motion';
+      show('fling');
+      pad.setTest(true);
+      $('flingHint').textContent = 'Aim test: turn the phone like a wheel to aim, tip the top back to pull. Tap to re-centre.';
+      return;
+    }
+    testing = false;
 
     switch (state.phase) {
       case 'lobby': {
@@ -216,7 +264,7 @@ function start(code, name) {
           pad.setEnabled(!inFlight);
           pad.setFlying(inFlight);
           const how = mode === 'motion' && motionSupported()
-            ? (motionGranted ? 'Hold anywhere, tilt to aim, swing and let go!' : 'Tap “Enable motion” first.')
+            ? (motionGranted ? 'Hold anywhere, turn to aim, pull back, let go!' : 'Tap “Enable motion” first.')
             : 'Drag back, let go.';
           $('flingHint').textContent = note || (inFlight
             ? 'Tap for the bird’s power!'

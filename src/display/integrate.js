@@ -7,6 +7,16 @@
 import { EVENTS } from '../shared/events.js';
 import { sampleLevels, validateLevel } from '../shared/level.js';
 import { createScanDebug } from './scanDebug.js';
+import { createDebugHud } from './hud.js';
+import { createReading } from './reading.js';
+
+// Fort detector, cycled with C on the display: vision's default (per-colour OpenCV) or the
+// hybrid OpenCV shapes + Claude colours (falls back to OpenCV by itself on any failure).
+const DETECTORS = ['opencv', 'hybrid'];
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+};
 
 const gameModules = import.meta.glob('../game/index.js');
 const visionModules = import.meta.glob('../vision/parseFort.js');
@@ -29,6 +39,23 @@ async function loadVision() {
   return mod.parseFort;
 }
 
+function toast(text) {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    Object.assign(el.style, {
+      position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 60, padding: '10px 20px',
+      font: "22px 'Permanent Marker', system-ui, sans-serif", background: '#fbf7ec', border: '3px solid #2b2622', borderRadius: '12px',
+    });
+    document.body.append(el);
+  }
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => (el.hidden = true), 2500);
+}
+
 export function integrate({ net, ui, canvas }) {
   let phase = 'lobby';
   let game = null;
@@ -37,6 +64,9 @@ export function integrate({ net, ui, canvas }) {
   let parsing = 0; // id of the newest parse, so a slow old one can't win
   let levelLoaded = false;
   const scanDebug = createScanDebug(); // D toggles the vision debug overlay
+  const hud = createDebugHud(); // H toggles the motion debug HUD
+  const reading = createReading();
+  let detector = DETECTORS.includes(store.get('angry-sketches:detector')) ? store.get('angry-sketches:detector') : 'opencv';
 
   const gameReady = loadGame(canvas)
     .then((g) => {
@@ -44,6 +74,16 @@ export function integrate({ net, ui, canvas }) {
       if (!g) return;
       g.on('phase', ({ phase: gp }) => {
         if (gp === 'aiming' && pendingLaunch) tryLaunch(pendingLaunch);
+      });
+      // webcam pull (game's hand tracking) -> the shooter's phone, at most 20/s
+      let lastPower = 0;
+      g.on?.('power', ({ power, source = 'webcam' } = {}) => {
+        const now = performance.now();
+        if (phase !== 'fling' || now - lastPower < 50) return;
+        lastPower = now;
+        const p = { power, source };
+        net.send(EVENTS.POWER_UPDATE, p);
+        hud.powerSent(p);
       });
       g.on('shotDone', ({ pigsLeft, birdsUsed, score }) => {
         if (phase === 'fling') net.send(EVENTS.SHOT_DONE, { pigsLeft, birdsUsed, score });
@@ -67,6 +107,7 @@ export function integrate({ net, ui, canvas }) {
       if (res && res.ok === false) return; // levelError handler shows the message
     }
     levelLoaded = true;
+    reading.stop();
     ui.hideCard();
     net.send(EVENTS.LEVEL_READY, { blocks: level.blocks.length, pigs: level.pigs.length });
   }
@@ -81,6 +122,7 @@ export function integrate({ net, ui, canvas }) {
 
   /** debugCanvas (from vision) shows the drawers what was detected. */
   function showFortError(message, debugCanvas) {
+    reading.stop();
     const msg = String(message).replace(/[.\s]+$/, '');
     ui.card('Fort not ready', `${msg}. Scan again from a phone, or use a sample fort.`, [
       { label: 'Use sample fort', onClick: useSample },
@@ -90,23 +132,35 @@ export function integrate({ net, ui, canvas }) {
   net.on(EVENTS.FORT_IMAGE, async ({ dataUrl } = {}) => {
     if (phase !== 'draw' && phase !== 'scan' && !(phase === 'fling' && !levelLoaded)) return;
     const id = ++parsing;
-    ui.card('Scanning fort…', 'Turning your drawing into a level', []);
+    ui.card('Reading your fort…', 'Hold tight, this takes a few seconds', [], reading.el);
+    reading.start();
     try {
       await visionReady;
       // the phone's JPEG data URL goes to vision unchanged (no re-encode, no resize)
-      const result = await parseFort(dataUrl);
-      scanDebug.record({ photo: dataUrl, result });
+      const result = await parseFort(dataUrl, detector === 'opencv' ? {} : { detector });
+      scanDebug.record({ photo: dataUrl, result, detector });
+      const t = result.timings || {};
+      hud.scan(`${result.level?.meta?.detector ?? detector}${t.claude ? ` · Claude ${Math.round(t.claude)} ms` : ''} · total ${Math.round(t.total || 0)} ms`);
       if (id !== parsing) return;
       const { level, page, pageToWorld } = result;
       await startLevel(level, { photo: dataUrl, page, pageToWorld });
     } catch (err) {
-      scanDebug.record({ photo: dataUrl, error: err });
+      scanDebug.record({ photo: dataUrl, error: err, detector });
+      hud.scan(`${detector} · failed: ${err?.message || err}`);
       if (id !== parsing) return;
       showFortError(err?.message || String(err), err?.debugCanvas);
     }
   });
 
-  net.on(EVENTS.AIM, (a) => phase === 'fling' && game?.aim(a));
+  net.on(EVENTS.AIM, (a) => {
+    hud.aim(a);
+    if (phase === 'fling') game?.aim(a);
+  });
+  // grip {held}: the game's webcam pull takes its hand-size baseline at grip start
+  net.on(EVENTS.GRIP, (g) => {
+    hud.grip(g);
+    if (phase === 'fling') game?.grip?.(g);
+  });
   // The game only accepts a launch while it is 'aiming' (not during the settle / "comes alive"
   // reveal). The server already counts the bird as in flight, so a launch that arrives early is
   // held and fired as soon as the game is ready; one the game rejects outright is reported back
@@ -126,13 +180,21 @@ export function integrate({ net, ui, canvas }) {
     pendingLaunch = null;
     if (game.launch(l) === false) rejectLaunch();
   }
-  net.on(EVENTS.LAUNCH, tryLaunch);
+  net.on(EVENTS.LAUNCH, (l) => {
+    hud.launch(l);
+    tryLaunch(l);
+  });
   net.on(EVENTS.ABILITY, () => phase === 'fling' && game?.ability?.());
 
   // keyboard shortcuts for the operator: S = sample fort, N = next
   window.addEventListener('keydown', (e) => {
     if ((e.key === 's' || e.key === 'S') && (phase === 'draw' || phase === 'scan' || (phase === 'fling' && !levelLoaded))) useSample();
     if (e.key === 'n' || e.key === 'N') net.send(EVENTS.NEXT, {});
+    if (e.key === 'c' || e.key === 'C') {
+      detector = DETECTORS[(DETECTORS.indexOf(detector) + 1) % DETECTORS.length];
+      store.set('angry-sketches:detector', detector);
+      toast(`Fort detector: ${detector === 'hybrid' ? 'hybrid (OpenCV shapes + Claude colours)' : 'OpenCV colours'}`);
+    }
   });
 
   return {
