@@ -1,0 +1,17 @@
+body { margin: 0; padding: 16px; font: 15px system-ui, sans-serif; background: #f4f1ea; color: #222; }
+h1 { margin: 0 0 4px; }
+.cal { display: grid; gap: 12px; }
+.cal-top, .cal-colours { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cal-btn { font: inherit; padding: 8px 14px; border-radius: 999px; border: 1px solid #bbb; background: #fff; cursor: pointer; }
+.cal-btn:hover { border-color: #333; }
+.cal-colour.on { background: #222; color: #fff; border-color: #222; }
+.cal-status { color: #555; }
+.cal-sliders { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; }
+.cal-slider { display: grid; grid-template-columns: 52px 1fr 36px; align-items: center; gap: 8px; font-size: 13px; }
+.cal-views { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cal-views figure { margin: 0; }
+.cal-views canvas { width: 100%; height: auto; background: #ddd; border-radius: 8px; display: block; }
+.cal-page { cursor: crosshair; }
+.cal-views figcaption { font-size: 13px; color: #555; margin-top: 4px; }
+.cal-result { margin: 0; padding: 10px; background: #fff; border-radius: 8px; font-size: 13px; }
+@media (max-width: 700px) { .cal-views { grid-template-columns: 1fr; } }

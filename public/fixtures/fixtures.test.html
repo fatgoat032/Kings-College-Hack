@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vision fixtures</title>
+  <style>
+    body { margin: 0; padding: 16px; font: 14px system-ui, sans-serif; background: #f4f1ea; color: #222; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    #summary { font-size: 18px; font-weight: 700; margin: 8px 0 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
+    .card { background: #fff; border-radius: 10px; padding: 12px; border: 3px solid #ccc; }
+    .card.pass { border-color: #2fa83a; }
+    .card.fail { border-color: #d62424; }
+    .card h2 { margin: 0 0 4px; font-size: 15px; }
+    .row { display: flex; gap: 8px; }
+    .row img, .row canvas { width: 50%; height: auto; border-radius: 6px; background: #ddd; }
+    .badge { font-weight: 700; }
+    .pass .badge { color: #1d7a28; }
+    .fail .badge { color: #b31b1b; }
+    ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
+    .muted { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Vision fixtures</h1>
+  <p class="muted">Each photo in <code>public/fixtures/fixtures.json</code> goes through <code>parseFort()</code> and is compared with its expected JSON
+    (centres within 45 world units for blocks, 35 for pigs, same material, no extras). Left: input. Right: what vision saw.</p>
+  <div id="summary">Loading OpenCV…</div>
+  <div class="grid" id="grid"></div>
+
+  <script type="module">
+    import { parseFort, parseBird, ready } from '/src/vision/index.js';
+    import { compareLevels } from '/src/vision/compare.js';
+
+    const grid = document.getElementById('grid');
+    const summary = document.getElementById('summary');
+    const results = [];
+
+    await ready();
+    const manifest = await (await fetch('./fixtures.json', { cache: 'no-store' })).json();
+    summary.textContent = `Running ${manifest.length} fixtures…`;
+
+    for (const f of manifest) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `<h2>${f.name} <span class="badge">…</span></h2><div class="muted">${f.note || ''}</div><div class="row"><img src="./${f.image}" alt=""></div><div class="out muted"></div>`;
+      grid.append(card);
+      const badge = card.querySelector('.badge');
+      const out = card.querySelector('.out');
+      const row = card.querySelector('.row');
+
+      const want = await (await fetch(`./${f.expected}`, { cache: 'no-store' })).json();
+      let pass = false;
+      let detail = '';
+      let lines = [];
+      try {
+        if (f.type === 'bird') {
+          const { bird, debugCanvas } = await parseBird(`./${f.image}`);
+          row.append(debugCanvas);
+          const [lo, hi] = want.bird.pointiness;
+          pass = bird.pointiness >= lo && bird.pointiness <= hi;
+          detail = `pointiness ${bird.pointiness} (want ${lo}–${hi}) · area ${bird.area} · ${bird.polygon.length} vertices`;
+        } else {
+        const { level, debugCanvas, warnings, timings } = await parseFort(`./${f.image}`);
+        row.append(debugCanvas);
+        if (want.error) {
+          detail = `expected error "${want.error}" but got a level`;
+        } else {
+          const c = compareLevels(level, want);
+          pass = c.pass;
+          detail = `${c.summary} · ${Math.round(timings.total)} ms`;
+          lines = [...c.missing.map((m) => `missing ${m}`), ...c.extra.map((e) => `extra ${e}`), ...warnings];
+        }
+        }
+      } catch (err) {
+        if (err.debugCanvas) row.append(err.debugCanvas);
+        if (want.error && err.message === want.error) {
+          pass = true;
+          detail = `correctly rejected: "${err.message}"`;
+        } else {
+          detail = `error: ${err.message}`;
+        }
+      }
+      card.classList.add(pass ? 'pass' : 'fail');
+      badge.textContent = pass ? 'PASS' : 'FAIL';
+      out.innerHTML = `${detail}${lines.length ? `<ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul>` : ''}`;
+      results.push({ name: f.name, pass, detail, lines });
+    }
+
+    const passed = results.filter((r) => r.pass).length;
+    summary.textContent = `${passed} / ${results.length} passed`;
+    document.title = `Vision fixtures: ${passed}/${results.length}`;
+    window.__visionResults = results; // for automated checks
+    document.body.dataset.done = 'true';
+  </script>
+</body>
+</html>

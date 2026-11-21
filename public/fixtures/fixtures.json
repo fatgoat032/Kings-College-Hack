@@ -1,0 +1,47 @@
+[
+  {
+    "name": "synthetic-flat",
+    "image": "synthetic-flat.svg",
+    "expected": "synthetic-flat.expected.json",
+    "note": "Flat page, good light"
+  },
+  {
+    "name": "synthetic-tilted",
+    "image": "synthetic-tilted.svg",
+    "expected": "synthetic-tilted.expected.json",
+    "note": "Page rotated 9° and skewed"
+  },
+  {
+    "name": "synthetic-dim",
+    "image": "synthetic-dim.svg",
+    "expected": "synthetic-dim.expected.json",
+    "note": "Dim light with a shadow across the page"
+  },
+  {
+    "name": "synthetic-no-pig",
+    "image": "synthetic-no-pig.svg",
+    "expected": "synthetic-no-pig.expected.json",
+    "note": "No green pig: must fail with a friendly error"
+  },
+  {
+    "name": "bird-round",
+    "type": "bird",
+    "image": "bird-round.svg",
+    "expected": "bird-round.expected.json",
+    "note": "Round blob: heavy, not pointy"
+  },
+  {
+    "name": "bird-triangle",
+    "type": "bird",
+    "image": "bird-triangle.svg",
+    "expected": "bird-triangle.expected.json",
+    "note": "Triangle: medium pointy"
+  },
+  {
+    "name": "bird-star",
+    "type": "bird",
+    "image": "bird-star.svg",
+    "expected": "bird-star.expected.json",
+    "note": "Star: very pointy"
+  }
+]
