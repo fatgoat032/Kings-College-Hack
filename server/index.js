@@ -1,67 +1,107 @@
-// Express + Socket.io server. P0: rooms + relay so both pages can talk.
-// P1 adds teams, turn order and the lobby -> draw -> scan -> fling -> result phase machine.
+// Express + Socket.io server: rooms by 4-letter code, two teams, turn order and the
+// lobby -> draw -> scan -> fling -> result phase machine (logic in room.js).
 import express from 'express';
 import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
 import { EVENTS, ROLES } from '../src/shared/events.js';
+import { createRoom } from './room.js';
 
 const PORT = Number(process.env.SERVER_PORT || 3000);
 const DIST = fileURLToPath(new URL('../dist', import.meta.url));
 
+const lanIps = () =>
+  Object.values(networkInterfaces())
+    .flat()
+    .filter((i) => i?.family === 'IPv4' && !i.internal)
+    .map((i) => i.address);
+
 const app = express();
 app.use(express.static(DIST)); // production build (npm start); in dev Vite serves the pages
 app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/api/info', (_req, res) => res.json({ lanIps: lanIps() }));
 
 const http = createServer(app);
 const io = new Server(http, { maxHttpBufferSize: 5e6 }); // fort photos are a few hundred KB
 
-/** room code -> { players: Map<socketId, {name, role}>, phase } */
+/** code -> room */
 const rooms = new Map();
+const getRoom = (code) => {
+  if (!rooms.has(code)) rooms.set(code, createRoom(code));
+  return rooms.get(code);
+};
 
-function roomState(code) {
-  const room = rooms.get(code);
-  return {
-    players: [...room.players.values()],
-    teams: { A: [], B: [] },
-    turn: null,
-    phase: room.phase,
-  };
-}
+/** "CODE:pid" -> socket id of that player's newest connection */
+const owners = new Map();
+
+const log = (code, ...a) => console.log(new Date().toISOString().slice(11, 19), `[${code}]`, ...a);
 
 io.on('connection', (socket) => {
-  let code = null;
+  let room = null;
+  let pid = null;
 
-  socket.on(EVENTS.JOIN, ({ room, role, name } = {}) => {
-    if (typeof room !== 'string' || !Object.values(ROLES).includes(role)) return;
-    code = room.toUpperCase();
-    if (!rooms.has(code)) rooms.set(code, { players: new Map(), phase: 'lobby' });
-    rooms.get(code).players.set(socket.id, { id: socket.id, name: String(name || role), role });
-    socket.join(code);
-    socket.join(`${code}:${role}`);
-    io.to(code).emit(EVENTS.ROOM_STATE, roomState(code));
+  const broadcastState = () => io.to(room.code).emit(EVENTS.ROOM_STATE, room.state());
+
+  /** Perform the effects a room action returned. */
+  function apply(fx, event, payload) {
+    for (const f of fx) {
+      if (f.type === 'relay') io.to(`${room.code}:${ROLES.DISPLAY}`).emit(event, payload);
+      else if (f.type === 'phase') {
+        log(room.code, 'phase ->', room.state().phase);
+        io.to(room.code).emit(EVENTS.PHASE, { phase: room.state().phase });
+        broadcastState();
+      } else if (f.type === 'state') broadcastState();
+      else if (f.type === 'result') {
+        log(room.code, 'result', f);
+        io.to(room.code).emit(EVENTS.RESULT, { winner: f.winner, scores: f.scores, roundDone: f.roundDone });
+      }
+    }
+  }
+
+  socket.on(EVENTS.JOIN, ({ room: code, role, name, pid: clientPid } = {}) => {
+    if (typeof code !== 'string' || !/^[A-Za-z]{4}$/.test(code)) return;
+    if (!Object.values(ROLES).includes(role)) return;
+    if (room) room.leave(pid);
+    room = getRoom(code.toUpperCase());
+    pid = typeof clientPid === 'string' && clientPid.length <= 64 ? clientPid : socket.id;
+    owners.set(`${room.code}:${pid}`, socket.id);
+    const p = room.join(pid, { name, role });
+    socket.join(room.code);
+    socket.join(`${room.code}:${role}`);
+    log(room.code, `join ${role} ${p.name} team=${p.team}`);
+    socket.emit(EVENTS.PHASE, { phase: room.state().phase });
+    broadcastState();
   });
 
-  // controller -> display relays
-  for (const ev of [EVENTS.FORT_IMAGE, EVENTS.AIM, EVENTS.LAUNCH]) {
-    socket.on(ev, (payload) => code && io.to(`${code}:${ROLES.DISPLAY}`).emit(ev, payload));
-  }
-  // display -> server (logged for now; P1 drives the phase machine from these)
-  for (const ev of [EVENTS.LEVEL_READY, EVENTS.SHOT_DONE]) {
-    socket.on(ev, (payload) => console.log(`[${code}] ${ev}`, payload));
-  }
+  const on = (event, action) =>
+    socket.on(event, (payload) => {
+      if (!room) return;
+      try {
+        apply(action(pid, payload ?? {}), event, payload);
+      } catch (err) {
+        console.error(event, err);
+      }
+    });
+
+  on(EVENTS.NEXT, (id) => room.next(id));
+  on(EVENTS.FORT_IMAGE, (id) => room.fortImage(id));
+  on(EVENTS.LEVEL_READY, (id, p) => room.levelReady(id, p));
+  on(EVENTS.AIM, (id) => room.aim(id));
+  on(EVENTS.LAUNCH, (id) => room.launch(id));
+  on(EVENTS.ABILITY, (id) => room.ability(id));
+  on(EVENTS.SHOT_DONE, (id, p) => room.shotDone(id, p));
 
   socket.on('disconnect', () => {
-    const room = code && rooms.get(code);
     if (!room) return;
-    room.players.delete(socket.id);
-    if (room.players.size === 0) rooms.delete(code);
-    else io.to(code).emit(EVENTS.ROOM_STATE, roomState(code));
+    const key = `${room.code}:${pid}`;
+    if (owners.get(key) !== socket.id) return; // a newer connection already took over
+    owners.delete(key);
+    room.leave(pid);
+    broadcastState();
   });
 });
 
 http.listen(PORT, () => {
-  const ips = Object.values(networkInterfaces()).flat().filter((i) => i?.family === 'IPv4' && !i.internal);
-  console.log(`socket server on :${PORT}  (LAN: ${ips.map((i) => i.address).join(', ') || 'none'})`);
+  console.log(`socket server on :${PORT}  (LAN: ${lanIps().join(', ') || 'none'})`);
 });

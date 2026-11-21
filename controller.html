@@ -2,35 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#fbf7ec" />
   <title>Angry Sketches · controller</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #fbf7ec; color: #2b2622; font: 16px system-ui, sans-serif; }
-    main { padding: 16px; display: grid; gap: 12px; }
-    button { font-size: 20px; padding: 14px; border-radius: 10px; border: 2px solid #2b2622; background: #fff; }
-  </style>
+  <link rel="stylesheet" href="/src/controller/controller.css" />
 </head>
 <body>
-  <!-- P0 placeholder: joins the room and sends a test launch. P1 adds the slingshot pad and camera. -->
-  <main>
-    <div>Room: <b id="room"></b> · <span id="status">connecting…</span></div>
-    <button id="test">Test launch</button>
-  </main>
-  <script type="module">
-    import { connect } from './src/net/socket.js';
-    import { EVENTS, ROLES } from './src/shared/events.js';
+  <header id="bar">
+    <span id="who"></span>
+    <span id="status">connecting…</span>
+  </header>
 
-    const room = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
-    document.getElementById('room').textContent = room || '(none, add ?room=XXXX)';
-    const status = document.getElementById('status');
+  <!-- join form, shown when there is no ?room= -->
+  <section id="join" class="screen" hidden>
+    <h1>Angry Sketches</h1>
+    <label>Room code <input id="joinRoom" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="ABCD" /></label>
+    <label>Your name <input id="joinName" maxlength="20" autocomplete="nickname" placeholder="Sam" /></label>
+    <button id="joinBtn" class="big">Join</button>
+  </section>
 
-    const net = connect({ room, role: ROLES.CONTROLLER, name: 'phone' });
-    net.socket.on('connect', () => (status.textContent = 'connected'));
-    net.socket.on('disconnect', () => (status.textContent = 'reconnecting…'));
-    net.on(EVENTS.ROOM_STATE, (s) => (status.textContent = `connected · ${s.players.length} in room`));
+  <section id="msg" class="screen" hidden>
+    <h1 id="msgTitle"></h1>
+    <p id="msgText"></p>
+    <ul id="legend" hidden>
+      <li><i style="background:#1d1d1d"></i>black marker = wood</li>
+      <li><i style="background:#2f6fd6"></i>blue = ice</li>
+      <li><i style="background:#9a9a9a"></i>pencil / grey = stone</li>
+      <li><i style="background:#d8322b"></i>red = TNT</li>
+      <li><i style="background:#3aa548"></i>green blobs = pigs</li>
+    </ul>
+    <div id="scores" hidden></div>
+    <label id="scanLabel" class="big button" hidden>
+      📷 Scan fort
+      <input id="scanInput" type="file" accept="image/*" capture="environment" hidden />
+    </label>
+    <button id="nextBtn" class="big" hidden></button>
+  </section>
 
-    document.getElementById('test').onclick = () =>
-      net.send(EVENTS.LAUNCH, { angle: -Math.PI / 4, power: 0.7, bird: 'red' });
-  </script>
+  <section id="fling" class="screen" hidden>
+    <p id="flingHint">Drag back from the centre, let go to fling!</p>
+    <canvas id="pad"></canvas>
+  </section>
+
+  <script type="module" src="/src/controller/main.js"></script>
 </body>
 </html>

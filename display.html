@@ -4,33 +4,46 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Angry Sketches · display</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #e8e1d0; color: #2b2622; font: 16px system-ui, sans-serif; }
-    #code { position: fixed; top: 12px; right: 16px; font-size: 28px; font-weight: 700; letter-spacing: 4px; }
-    #log { position: fixed; left: 12px; bottom: 12px; max-height: 40vh; overflow: auto; font: 12px ui-monospace, monospace; white-space: pre; }
-  </style>
+  <link rel="stylesheet" href="/src/display/display.css" />
 </head>
 <body>
-  <!-- P0 placeholder: joins a room and logs every event. P2 wires vision + game in here. -->
-  <div id="code"></div>
-  <div id="log"></div>
-  <script type="module">
-    import { connect } from './src/net/socket.js';
-    import { EVENTS, ROLES } from './src/shared/events.js';
+  <canvas id="game"></canvas>
 
-    const params = new URLSearchParams(location.search);
-    const room = (params.get('room') || Math.random().toString(36).slice(2, 6)).toUpperCase();
-    if (!params.get('room')) history.replaceState(null, '', `?room=${room}`);
-    document.getElementById('code').textContent = room;
+  <!-- top bar: phase, scores, small join code -->
+  <header id="hud" hidden>
+    <div class="team A"><b>Team A</b> <span id="scoreA">0</span></div>
+    <div id="phaseText"></div>
+    <div class="team B"><span id="scoreB">0</span> <b>Team B</b></div>
+    <div id="mini"><canvas id="miniQr"></canvas><span id="miniCode"></span></div>
+  </header>
 
-    const logEl = document.getElementById('log');
-    const log = (ev, p) => {
-      const short = p && p.dataUrl ? { ...p, dataUrl: `${p.dataUrl.slice(0, 30)}…` } : p;
-      logEl.textContent = `${new Date().toLocaleTimeString()} ${ev} ${JSON.stringify(short)}\n` + logEl.textContent;
-    };
+  <!-- lobby: big code + QR -->
+  <section id="lobby" class="overlay" hidden>
+    <h1>Angry Sketches</h1>
+    <div class="join">
+      <canvas id="qr"></canvas>
+      <div>
+        <p>Scan to join, or open</p>
+        <p id="joinUrl"></p>
+        <p>and enter code</p>
+        <div id="code"></div>
+      </div>
+    </div>
+    <div class="rosters">
+      <ul id="rosterA" class="A"></ul>
+      <ul id="rosterB" class="B"></ul>
+    </div>
+    <button id="startBtn">Start game</button>
+  </section>
 
-    const net = connect({ room, role: ROLES.DISPLAY, name: 'display' });
-    for (const ev of Object.values(EVENTS)) net.on(ev, (p) => log(ev, p));
-  </script>
+  <!-- centre card for draw / scan / result / errors -->
+  <section id="card" class="overlay card" hidden>
+    <h2 id="cardTitle"></h2>
+    <p id="cardText"></p>
+    <div id="cardButtons"></div>
+  </section>
+
+  <pre id="log" hidden></pre>
+  <script type="module" src="/src/display/main.js"></script>
 </body>
 </html>

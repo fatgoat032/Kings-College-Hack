@@ -9,6 +9,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/socket.io': { target: `http://localhost:${SERVER_PORT}`, ws: true },
+      '/api': `http://localhost:${SERVER_PORT}`,
     },
   },
   build: {
@@ -17,6 +18,7 @@ export default defineConfig({
         index: resolve(import.meta.dirname, 'index.html'),
         display: resolve(import.meta.dirname, 'display.html'),
         controller: resolve(import.meta.dirname, 'controller.html'),
+        fakeDisplay: resolve(import.meta.dirname, 'src/net/fake-display.html'),
       },
     },
   },

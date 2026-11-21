@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Angry Sketches · fake display</title>
+  <style>
+    body { margin: 0; padding: 16px; font: 14px system-ui, sans-serif; background: #fbf7ec; color: #2b2622; }
+    h1 { margin: 0 0 8px; font-size: 20px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+    button { font: inherit; padding: 6px 10px; }
+    #state { white-space: pre; font: 12px ui-monospace, monospace; background: #fff; padding: 8px; border: 1px solid #d9cfb8; max-height: 30vh; overflow: auto; }
+    #log { white-space: pre; font: 12px ui-monospace, monospace; }
+    img { max-width: 320px; display: block; margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <!-- Stands in for the real display: logs every event and fakes level:ready / shot:done,
+       so the phone controller and server can be tested without vision or the game. -->
+  <h1>Fake display · room <span id="code"></span></h1>
+  <div class="row">
+    <button id="ready">level:ready (sample 1)</button>
+    <button id="hit">shot:done (killed 1 pig)</button>
+    <button id="miss">shot:done (miss)</button>
+    <button id="next">next</button>
+  </div>
+  <div id="state"></div>
+  <div id="img"></div>
+  <div id="log"></div>
+  <script type="module">
+    import { connect } from './socket.js';
+    import { EVENTS, ROLES } from '../shared/events.js';
+    import { sampleLevels } from '../shared/level.js';
+
+    const params = new URLSearchParams(location.search);
+    const room = (params.get('room') || 'TEST').toUpperCase();
+    document.getElementById('code').textContent = room;
+    const net = connect({ room, role: ROLES.DISPLAY, name: 'fake-display' });
+
+    const logEl = document.getElementById('log');
+    const log = (ev, p) => {
+      const short = p?.dataUrl ? { ...p, dataUrl: `${p.dataUrl.slice(0, 30)}… (${Math.round(p.dataUrl.length / 1024)} KB)` } : p;
+      logEl.textContent = `${new Date().toLocaleTimeString()} ${ev} ${JSON.stringify(short)}\n` + logEl.textContent;
+    };
+    for (const ev of Object.values(EVENTS)) net.on(ev, (p) => log(ev, p));
+
+    let st = null;
+    let pigsLeft = 0, birdsUsed = 0, score = 0;
+    net.on(EVENTS.ROOM_STATE, (s) => {
+      st = s;
+      document.getElementById('state').textContent = JSON.stringify(s, null, 1);
+    });
+    net.on(EVENTS.FORT_IMAGE, ({ dataUrl }) => {
+      document.getElementById('img').innerHTML = `<img src="${dataUrl}" alt="fort photo">`;
+    });
+
+    const lvl = sampleLevels[0];
+    document.getElementById('ready').onclick = () => {
+      pigsLeft = lvl.pigs.length; birdsUsed = 0; score = 0;
+      net.send(EVENTS.LEVEL_READY, { blocks: lvl.blocks.length, pigs: pigsLeft });
+    };
+    document.getElementById('hit').onclick = () => {
+      pigsLeft = Math.max(0, pigsLeft - 1); birdsUsed++; score += 5000;
+      net.send(EVENTS.SHOT_DONE, { pigsLeft, birdsUsed, score });
+    };
+    document.getElementById('miss').onclick = () => {
+      birdsUsed++;
+      net.send(EVENTS.SHOT_DONE, { pigsLeft, birdsUsed, score });
+    };
+    document.getElementById('next').onclick = () => net.send(EVENTS.NEXT, {});
+  </script>
+</body>
+</html>

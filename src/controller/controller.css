@@ -1,0 +1,24 @@
+:root { --ink: #2b2622; --paper: #fbf7ec; --a: #d8322b; --b: #2f6fd6; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink); font: 18px system-ui, sans-serif; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+body { display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+#bar { display: flex; justify-content: space-between; padding: 10px 16px; font-size: 15px; border-bottom: 2px dashed #d9cfb8; }
+#who b.A { color: var(--a); } #who b.B { color: var(--b); }
+.screen { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+.screen[hidden] { display: none; }
+h1 { margin: 8px 0 0; font-size: 30px; }
+p { margin: 0; line-height: 1.4; }
+label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+input { font-size: 22px; padding: 12px; border: 2px solid var(--ink); border-radius: 10px; background: #fff; text-transform: none; }
+#joinRoom { text-transform: uppercase; letter-spacing: 6px; }
+.big, .button { font-size: 22px; font-weight: 700; padding: 16px; border-radius: 12px; border: 3px solid var(--ink); background: #fff; color: var(--ink); text-align: center; cursor: pointer; }
+.big:active { transform: translateY(2px); }
+#legend { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+#legend i { display: inline-block; width: 18px; height: 18px; border-radius: 4px; margin-right: 8px; vertical-align: -3px; }
+#scores { display: flex; gap: 12px; }
+#scores div { flex: 1; text-align: center; padding: 12px; border: 3px solid; border-radius: 12px; font-size: 28px; font-weight: 800; }
+#scores .A { border-color: var(--a); color: var(--a); } #scores .B { border-color: var(--b); color: var(--b); }
+#scores small { display: block; font-size: 14px; font-weight: 600; }
+#fling { padding: 0; }
+#flingHint { padding: 10px 16px 0; text-align: center; font-weight: 600; }
+#pad { flex: 1; width: 100%; min-height: 0; display: block; }
