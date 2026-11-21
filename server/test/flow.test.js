@@ -148,5 +148,26 @@ check(d.state.turn.round === 2 && d.state.turn.attacker === 'A', 'round 2, A att
   try { await c3.layout({ clean: img }); } catch (e) { err = e.message; }
   check(/declined/.test(err), 'refusal becomes an error (vision falls back)');
 }
+// TEAM FIX #3: /api/read + /api/verify with a fake client
+{
+  const { createClaude } = await import('../claude.js');
+  let sent = null;
+  const fake = (obj) => ({ messages: { create: async (p) => ((sent = p), { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(obj) }] }) } });
+  const img = 'data:image/png;base64,' + 'A'.repeat(40);
+  const c = createClaude({ client: fake({ seen: ['red block'], strokes: [{ colour: 'red', x1: 10, y1: 20, x2: 90, y2: 20, thickness: 12 }, { colour: 'pink', x1: 0, y1: 0, x2: 5, y2: 5, thickness: 3 }, { colour: 'grey', x1: 50, y1: 50, x2: 5000, y2: 50, thickness: 30 }], polys: [{ colour: 'blue', vertices: [[1, 1], [2, 30], [40, 5], ['x', 3]] }, { colour: 'black', vertices: [[1, 1], [2, 2]] }], pigs: [{ x: 60, y: 80, r: 10 }, { x: 1, y: 1, r: -2 }] }), log: () => {} });
+  const r = await c.read({ image: img, width: 200, height: 100, timeoutMs: 99999 });
+  const user = sent.messages.at(-1);
+  check(sent.output_config.effort === 'high' && /Red may look orange or pink/.test(sent.system) && sent.messages.length === 1 + 2 * c.fewShotCount && c.fewShotCount >= 1 && user.content[0].type === 'image' && /200 x 100 pixels/.test(user.content.at(-1).text),
+    `read: effort high, colour rules in the system prompt, ${c.fewShotCount} few-shot examples before the photo, image size stated`);
+  check(r.reading.strokes.length === 2 && r.reading.strokes[1].x2 === 200 && r.reading.polys.length === 1 && r.reading.polys[0].vertices.length === 3 && r.reading.pigs.length === 1 && r.seen[0] === 'red block',
+    'read: bad colours/vertices/pigs dropped, coordinates clamped to the image');
+  const v = createClaude({ client: fake({ changes: ['blue beam was black'], strokes: [{ colour: 'blue', x1: 10, y1: 20, x2: 90, y2: 20, thickness: 12 }], polys: [], pigs: [] }), log: () => {} });
+  const vr = await v.verify({ image: img, overlay: img, width: 200, height: 100, reading: r.reading });
+  check(vr.changes[0] === 'blue beam was black' && vr.reading.strokes[0].colour === 'blue' && sent.messages.length === 1 && sent.messages[0].content.filter((b) => b.type === 'image').length === 2 && /"strokes"/.test(sent.messages[0].content.at(-1).text),
+    'verify: photo + overlay + our reading sent, corrected reading and changes returned');
+  let err = '';
+  try { await c.read({ image: img, width: 3000, height: 100 }); } catch (e) { err = e.message; }
+  check(/2576/.test(err), 'read: images over 2576 px are refused');
+}
 console.log(fails ? `${fails} FAILED` : 'all passed');
 finish(fails ? 1 : 0);

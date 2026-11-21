@@ -1,13 +1,20 @@
 // Claude image endpoints for fort scanning (contract: src/shared/classify.js).
 //   POST /api/classify  OpenCV found the shapes; Claude says what colour / kind each numbered one is.
 //   POST /api/layout    fallback: Claude reads the whole layout from the clean page.
+//   POST /api/read      TEAM FIX #3: Claude reads every stroke (pixels), few-shot, effort high.
+//   POST /api/verify    TEAM FIX #3: Claude checks our reading drawn over the photo and corrects it.
 //   GET  /api/claude/status
 // The API key lives only here (.env ANTHROPIC_API_KEY) and is never sent to a browser.
 // Every failure (no key, no internet, timeout, refusal, bad answer) answers 200 { error } fast,
 // so vision falls back to its OpenCV colour masks and the game keeps going.
 import Anthropic from '@anthropic-ai/sdk';
 import express from 'express';
-import { CLAUDE_COLOURS, CLAUDE_KINDS, CLASSIFY_MAX_SHAPES } from '../src/shared/classify.js';
+import { CLAUDE_COLOURS, CLAUDE_KINDS, CLASSIFY_MAX_SHAPES, READ_MAX_EDGE } from '../src/shared/classify.js';
+import { READ_SYSTEM, VERIFY_SYSTEM, READ_SCHEMA, VERIFY_SCHEMA, readPrompt, verifyPrompt, loadFewShot, tidyReading } from './reading.js';
+
+const MAX_SCAN_TIMEOUT = 15_000;
+/** Effort for /api/read and /api/verify (accuracy over speed); CLAUDE_READ_EFFORT overrides. */
+const READ_EFFORT = process.env.CLAUDE_READ_EFFORT || 'high';
 
 const DEFAULT_MODEL = 'claude-sonnet-5-5';
 const TIMEOUT_MS = 10_000;
@@ -129,21 +136,22 @@ export function createClaude(opts = {}) {
   const client = opts.client ?? (apiKey ? new Anthropic({ apiKey, timeout, maxRetries: 0 }) : null);
 
   /** One structured-output call with images; returns the parsed JSON object. */
-  async function ask(images, prompt, schema) {
+  async function ask(images, prompt, schema, { effort = 'low', system, history = [], timeoutMs = timeout, maxTokens = 8000 } = {}) {
     if (!client) throw new ScanError('no ANTHROPIC_API_KEY on the server');
     let res;
     try {
       res = await client.messages.create(
         {
           model,
-          max_tokens: 8000,
-          output_config: { effort: 'low', format: { type: 'json_schema', schema } },
-          messages: [{ role: 'user', content: [...images, { type: 'text', text: prompt }] }],
+          max_tokens: maxTokens,
+          ...(system ? { system } : {}),
+          output_config: { effort, format: { type: 'json_schema', schema } },
+          messages: [...history, { role: 'user', content: [...images, { type: 'text', text: prompt }] }],
         },
-        { timeout, maxRetries: 0 },
+        { timeout: timeoutMs, maxRetries: 0 },
       );
     } catch (e) {
-      if (e instanceof Anthropic.APIConnectionTimeoutError) throw new ScanError(`timed out after ${timeout / 1000} s`);
+      if (e instanceof Anthropic.APIConnectionTimeoutError) throw new ScanError(`timed out after ${timeoutMs / 1000} s`);
       if (e instanceof Anthropic.AuthenticationError) throw new ScanError('the API key was rejected');
       if (e instanceof Anthropic.RateLimitError) throw new ScanError('rate limited');
       if (e instanceof Anthropic.APIConnectionError) throw new ScanError('no connection to the Claude API (no internet?)');
@@ -173,6 +181,37 @@ export function createClaude(opts = {}) {
     return tidyLayout(out);
   }
 
+  // few-shot worked examples (vision's truth set), loaded once
+  const fewShot = loadFewShot();
+  const scanTimeout = (ms) => Math.min(MAX_SCAN_TIMEOUT, Math.max(1000, Number(ms) || 12_000));
+  const size = (w, h) => {
+    const W = Math.round(Number(w));
+    const H = Math.round(Number(h));
+    if (!(W > 0 && H > 0)) throw new ScanError('width and height (pixels of the image) are required');
+    if (Math.max(W, H) > READ_MAX_EDGE) throw new ScanError(`image is over ${READ_MAX_EDGE} px on the long edge`);
+    return [W, H];
+  };
+
+  /** exclude (server-side eval only): a truth file name to leave out of the few-shot examples. */
+  async function read({ image, width, height, timeoutMs }, { exclude } = {}) {
+    const [W, H] = size(width, height);
+    const out = await ask([imageBlock(image, 'image')], readPrompt(W, H), READ_SCHEMA, {
+      effort: READ_EFFORT, system: READ_SYSTEM, history: exclude ? loadFewShot(undefined, 2, exclude) : fewShot, timeoutMs: scanTimeout(timeoutMs), maxTokens: 16000,
+    });
+    return { reading: tidyReading(out, W, H), seen: Array.isArray(out.seen) ? out.seen.slice(0, 60) : [] };
+  }
+
+  async function verify({ image, overlay, width, height, reading, timeoutMs }) {
+    const [W, H] = size(width, height);
+    const ours = tidyReading(reading, W, H);
+    const out = await ask([imageBlock(image, 'image'), imageBlock(overlay, 'overlay')], verifyPrompt(W, H, ours), VERIFY_SCHEMA, {
+      effort: READ_EFFORT, system: VERIFY_SYSTEM, timeoutMs: scanTimeout(timeoutMs), maxTokens: 16000,
+    });
+    return { reading: tidyReading(out, W, H), changes: Array.isArray(out.changes) ? out.changes.slice(0, 60) : [] };
+  }
+
+  const readingSummary = (o) => `${o.reading.strokes.length} strokes, ${o.reading.polys.length} polys, ${o.reading.pigs.length} pigs`;
+
   /** Wrap a handler: always 200, { ...result, ms, model } or { error, ms }, plus a log line. */
   const route = (name, fn, summary) => async (req, res) => {
     const t0 = Date.now();
@@ -201,6 +240,8 @@ export function createClaude(opts = {}) {
     }),
   );
   router.post('/layout', route('layout', layout, (o) => `${o.blocks.length} blocks, ${o.pigs.length} pigs`));
+  router.post('/read', route('read', read, (o) => `${readingSummary(o)} (effort ${READ_EFFORT}, ${fewShot.length / 2} examples)`));
+  router.post('/verify', route('verify', verify, (o) => `${readingSummary(o)}, ${o.changes.length} changes`));
 
-  return { router, classify, layout, enabled: !!client, model };
+  return { router, classify, layout, read, verify, fewShotCount: fewShot.length / 2, enabled: !!client, model };
 }
