@@ -109,7 +109,7 @@ function start(code, name) {
       $('scores').hidden = !scores;
       if (scores) {
         $('scores').innerHTML = ['A', 'B']
-          .map((t) => `<div class="${t}">${state.scores[t].toLocaleString()}<small>Team ${t}</small></div>`)
+          .map((t) => { const b = (state.blobs || state.scores)[t]; return `<div class="${t}">${b}<small>Team ${t} · blob${b === 1 ? '' : 's'}</small></div>`; })
           .join('');
       }
     };
@@ -158,7 +158,8 @@ function start(code, name) {
       case 'result': {
         const r = lastResult;
         let title = 'Turn over';
-        if (r?.roundDone) title = r.winner ? `Team ${r.winner} wins round ${round}!` : 'It’s a tie!';
+        if (r?.roundDone) title = r.winner ? `Team ${r.winner} wins round ${round}!` : 'It’s a draw!';
+        else if (r?.turn) title = `Team ${r.turn.team}: ${r.turn.blobs} blob${r.turn.blobs === 1 ? '' : 's'} with ${r.turn.birds} bird${r.turn.birds === 1 ? '' : 's'}`;
         msg(title, r?.roundDone ? 'Play another round?' : `Next: Team ${defender} attacks.`, { scores: true, next: 'Next' });
         break;
       }

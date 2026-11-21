@@ -60,13 +60,14 @@ export function integrate({ net, ui, canvas }) {
     .catch((err) => console.error('vision failed to load', err));
 
   /** Load a level into the game and tell the server it is ready. */
-  async function startLevel(level) {
+  async function startLevel(level, extras = {}) {
     const check = validateLevel(level);
     if (!check.ok) return showFortError(check.errors[0]);
     if (!level.pigs.length) return showFortError('Draw at least one green pig');
     await gameReady;
     if (game) {
-      const res = game.loadLevel(level);
+      // extras: { photo, page } so the game can texture blocks with the real pen strokes
+      const res = game.loadLevel(level, extras);
       if (res && res.ok === false) return; // levelError handler shows the message
     }
     levelLoaded = true;
@@ -95,9 +96,9 @@ export function integrate({ net, ui, canvas }) {
     try {
       await visionReady;
       const img = await dataUrlToImage(dataUrl);
-      const { level } = await parseFort(img);
+      const { level, page } = await parseFort(img);
       if (id !== parsing) return;
-      await startLevel(level);
+      await startLevel(level, { photo: dataUrl, page });
     } catch (err) {
       if (id !== parsing) return;
       showFortError(err?.message || String(err), err?.debugCanvas);
@@ -141,12 +142,30 @@ export function integrate({ net, ui, canvas }) {
         }
       }
     },
+    // Turn summary and winner are drawn by the game in the canvas when it supports them;
+    // otherwise a marker-style card. Scores are blobs knocked out (tie = fewer birds).
     onResult(r) {
-      const { A, B } = r.scores;
-      const title = r.roundDone ? (r.winner ? `Team ${r.winner} wins!` : 'It’s a tie!') : 'Turn over';
-      ui.card(title, `Team A ${A.toLocaleString()} · Team B ${B.toLocaleString()}`, [
-        { label: r.roundDone ? 'Next round' : 'Swap teams', onClick: () => net.send(EVENTS.NEXT, {}) },
-      ]);
+      const next = () => net.send(EVENTS.NEXT, {});
+      const blobs = r.blobs || r.scores;
+      const t = r.turn;
+      if (r.roundDone && game?.showWinner) {
+        ui.hideCard();
+        return game.showWinner({ winner: r.winner, blobs, birds: r.birds }, next);
+      }
+      if (!r.roundDone && t && game?.showTurnSummary) {
+        ui.hideCard();
+        return game.showTurnSummary({ team: t.team, blobs: t.blobs, birds: t.birds });
+      }
+      const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+      if (r.roundDone) {
+        ui.card(r.winner ? `Team ${r.winner} wins!` : 'It’s a draw!',
+          `Team A knocked out ${plural(blobs.A, 'blob')} · Team B knocked out ${plural(blobs.B, 'blob')}`,
+          [{ label: 'Play again', onClick: next }]);
+      } else {
+        ui.card(`Team ${t?.team ?? ''} knocked out ${plural(t?.blobs ?? 0, 'blob')}!`,
+          `with ${plural(t?.birds ?? 0, 'bird')}. Now swap: the other team attacks.`,
+          [{ label: 'Swap teams', onClick: next }]);
+      }
     },
   };
 }
