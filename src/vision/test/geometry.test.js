@@ -117,3 +117,17 @@ test('bird polygon is centred with max radius 1, area is a page fraction', () =>
   const b = birdFromOutline(triangle, 1000 * 1000);
   assert.equal(b.area, Math.round((polygonArea(triangle) / 1e6) * 10000) / 10000);
 });
+
+import { pageTransform } from '../geometry.js';
+
+test('pageTransform matches pageToWorld exactly (for the game to crop strokes)', () => {
+  for (const [w, h] of [[800, 566], [400, 1000], [1580, 1180]]) {
+    const t = pageTransform(w, h);
+    const m = pageToWorld(w, h);
+    for (const [px, py] of [[0, 0], [w, h], [w / 3, h / 2]]) {
+      assert.ok(Math.abs(t.ox + px * t.sx - m.x(px)) < 1e-9);
+      assert.ok(Math.abs(t.oy + py * t.sy - m.y(py)) < 1e-9);
+    }
+    assert.ok(Math.abs(t.oy + h * t.sy - WORLD.groundY) < 1e-9, 'page bottom = ground');
+  }
+});

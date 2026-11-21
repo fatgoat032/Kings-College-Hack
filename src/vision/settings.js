@@ -11,9 +11,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
     // material: { h: [min, max] (may wrap, e.g. [170, 10] for red), s: [min, max], v: [min, max] }
     green: { h: [35, 90], s: [60, 255], v: [40, 255] }, // pigs
     blue: { h: [90, 135], s: [60, 255], v: [40, 255] }, // ice
-    red: { h: [165, 12], s: [80, 255], v: [50, 255] }, // tnt
-    black: { h: [0, 180], s: [0, 140], v: [0, 85] }, // wood
-    grey: { h: [0, 180], s: [0, 55], v: [86, 190] }, // stone (pencil)
+    red: { h: [165, 12], s: [70, 255], v: [60, 255] }, // tnt: two hue ranges (wraps at 180), OR'ed
+    black: { h: [0, 180], s: [0, 80], v: [0, 80] }, // wood: only truly dark AND grey-ish, so dark blue/red never count
+    grey: { h: [0, 180], s: [0, 45], v: [80, 228] }, // stone (pencil), measured on a slightly blurred page: low colour, clearly darker than the ~255 paper
   },
   /** Ignore blobs smaller than this fraction of the page area (plan: 0.3%). */
   minBlockArea: 0.003,

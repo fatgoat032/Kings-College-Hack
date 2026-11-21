@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "blocks": [
+    {
+      "id": "b1",
+      "material": "wood",
+      "x": 1079,
+      "y": 772,
+      "w": 16,
+      "h": 122,
+      "angle": 0
+    },
+    {
+      "id": "b2",
+      "material": "wood",
+      "x": 1225,
+      "y": 772,
+      "w": 16,
+      "h": 122,
+      "angle": 0
+    },
+    {
+      "id": "b3",
+      "material": "ice",
+      "x": 1152,
+      "y": 703,
+      "w": 179,
+      "h": 18,
+      "angle": 0
+    },
+    {
+      "id": "b4",
+      "material": "tnt",
+      "x": 1152,
+      "y": 662,
+      "w": 49,
+      "h": 49,
+      "angle": 0
+    },
+    {
+      "id": "b5",
+      "material": "stone",
+      "x": 1388,
+      "y": 776,
+      "w": 57,
+      "h": 114,
+      "angle": 0
+    },
+    {
+      "id": "b6",
+      "material": "stone",
+      "x": 1388,
+      "y": 703,
+      "w": 146,
+      "h": 33,
+      "angle": 0
+    }
+  ],
+  "pigs": [
+    {
+      "id": "p1",
+      "x": 1152,
+      "y": 809,
+      "r": 21
+    },
+    {
+      "id": "p2",
+      "x": 1388,
+      "y": 658,
+      "r": 20
+    }
+  ],
+  "meta": {
+    "source": "expected",
+    "checkThickness": true
+  }
+}

@@ -37,32 +37,59 @@ export function detect(cv, imageData, settings) {
     const hsv = keep(new cv.Mat());
     cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
     const masks = {};
-    for (const name of ['black', 'blue', 'red', 'green', 'grey']) {
+    for (const name of ['black', 'blue', 'red', 'green']) {
       masks[name] = keep(hsvMask(cv, hsv, settings.colours[name], keep));
     }
+    // Pencil is grainy (mostly white gaps at pixel level), so judge it on a slightly
+    // blurred page: a pencilled patch reads as an even light grey. (Hue is ignored for grey.)
+    const blurK = Math.max(3, Math.round(W * 0.012)) | 1;
+    const soft = keep(new cv.Mat());
+    cv.blur(rgb, soft, new cv.Size(blurK, blurK));
+    const hsvSoft = keep(new cv.Mat());
+    cv.cvtColor(soft, hsvSoft, cv.COLOR_RGB2HSV);
+    masks.grey = keep(hsvMask(cv, hsvSoft, settings.colours.grey, keep));
+    const grow = keep(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(9, 9)));
+    const removeNear = (target, source) => {
+      const near = keep(new cv.Mat());
+      cv.dilate(source, near, grow);
+      cv.bitwise_not(near, near);
+      cv.bitwise_and(target, near, target);
+    };
+    // Colours are classified BEFORE black: dark blue / dark red strokes must never
+    // become wood, so black loses any pixel at or next to a coloured stroke.
+    const colours = keep(new cv.Mat());
+    cv.bitwise_or(masks.blue, masks.red, colours);
+    cv.bitwise_or(colours, masks.green, colours);
+    removeNear(masks.black, colours);
     // Pencil (grey) also appears on the soft edges of every marker stroke:
     // remove grey pixels that sit next to any marker colour.
     const markers = keep(new cv.Mat());
-    cv.bitwise_or(masks.black, masks.blue, markers);
-    cv.bitwise_or(markers, masks.red, markers);
-    cv.bitwise_or(markers, masks.green, markers);
-    const grow = keep(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(9, 9)));
-    const near = keep(new cv.Mat());
-    cv.dilate(markers, near, grow);
-    cv.bitwise_not(near, near);
-    cv.bitwise_and(masks.grey, near, masks.grey);
+    cv.bitwise_or(colours, masks.black, markers);
+    removeNear(masks.grey, markers);
 
     // ---- 4 + 5. close gaps, find blobs ------------------------------------------
     const closeK = Math.max(3, Math.round(Math.min(W, H) * 0.012)) | 1;
     const closeKernel = keep(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(closeK, closeK)));
+    // Pencil is grainy and drawn as many thin strokes: rejoin with a bigger close
+    // (~1.5% of the page width, per the brief) so a WIDE pencil block stays one wide block.
+    const greyK = Math.max(5, Math.round(W * 0.015)) | 1;
+    const greyKernel = keep(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(greyK, greyK)));
     const openKernel = keep(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3)));
     const pageArea = W * H;
 
     const blocks = [];
     const minBlock = pageArea * settings.minBlockArea;
     for (const [name, material] of Object.entries(MATERIAL_OF)) {
-      for (const c of blobs(cv, masks[name], closeKernel, openKernel, minBlock, keep)) {
-        for (const r of splitIntoBars(cv, c, W, H, minBlock, keep)) {
+      const kernel = name === 'grey' ? greyKernel : closeKernel;
+      for (const c of blobs(cv, masks[name], kernel, openKernel, minBlock, keep)) {
+        const rects = splitIntoBars(cv, c, W, H, minBlock, keep);
+        for (const r of rects) {
+          // Never shrink a block below the drawn stroke thickness
+          // (2 × max distance-transform inside the blob); min thickness is only a floor.
+          if (rects.length === 1 && c.thick > 0) {
+            if (r.size.width <= r.size.height) r.size.width = Math.max(r.size.width, c.thick);
+            else r.size.height = Math.max(r.size.height, c.thick);
+          }
           blocks.push({
             material,
             cx: r.center.x, cy: r.center.y,
@@ -231,11 +258,18 @@ function blobs(cv, mask, closeKernel, openKernel, minArea, keep) {
   const contours = keep(new cv.MatVector());
   const hier = keep(new cv.Mat());
   cv.findContours(m, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+  // distance to the nearest background pixel: 2 × its max inside a blob = stroke thickness
+  const dt = keep(new cv.Mat());
+  cv.distanceTransform(m, dt, cv.DIST_L2, 5);
   const out = [];
   for (let i = 0; i < contours.size(); i++) {
     const c = keep(contours.get(i));
     const area = cv.contourArea(c);
-    if (area >= minArea) out.push({ contour: c, area });
+    if (area < minArea) continue;
+    const only = keep(cv.Mat.zeros(m.rows, m.cols, cv.CV_8UC1));
+    cv.drawContours(only, contours, i, new cv.Scalar(255), cv.FILLED);
+    const thick = 2 * cv.minMaxLoc(dt, only).maxVal;
+    out.push({ contour: c, area, thick });
   }
   return out;
 }

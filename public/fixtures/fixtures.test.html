@@ -69,6 +69,20 @@
         } else {
           const c = compareLevels(level, want);
           pass = c.pass;
+          const count = (lv, m) => lv.blocks.filter((b) => b.material === m).length;
+          const per = ['wood', 'ice', 'stone', 'tnt'].map((m) => `${m} ${count(level, m)}/${count(want, m)}`).join(' · ') + ` · pigs ${level.pigs.length}/${want.pigs.length}`;
+          lines.push(per);
+          if (want.meta?.checkThickness) {
+            // drawn thickness (short side) must survive within 30%, never come out thin
+            for (const w of want.blocks.filter((b) => b.material === 'stone')) {
+              const g = level.blocks.filter((b) => b.material === 'stone').sort((a, b) => Math.hypot(a.x - w.x, a.y - w.y) - Math.hypot(b.x - w.x, b.y - w.y))[0];
+              const want_t = Math.min(w.w, w.h);
+              const got_t = g ? Math.min(g.w, g.h) : 0;
+              const ok = got_t >= want_t * 0.7 && got_t <= want_t * 1.3;
+              if (!ok) pass = false;
+              lines.push(`stone thickness ${Math.round(got_t)} vs drawn ${want_t} ${ok ? '✓' : '✗ (must be within 30%)'}`);
+            }
+          }
           detail = `${c.summary} · ${Math.round(timings.total)} ms`;
           lines = [...c.missing.map((m) => `missing ${m}`), ...c.extra.map((e) => `extra ${e}`), ...warnings];
         }

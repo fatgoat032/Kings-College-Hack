@@ -8,8 +8,13 @@ Owner of `src/vision/` and `public/fixtures/`. Branch: `vision`.
 import { parseFort, ready } from './src/vision/index.js';
 
 await ready();                                  // loads OpenCV.js (~1-2 s the first time)
-const { level, debugCanvas, warnings } = await parseFort(dataUrlOrImageOrCanvas);
+const { level, debugCanvas, page, pageToWorld, warnings } = await parseFort(dataUrlOrImageOrCanvas);
 // level passes validateLevel(); debugCanvas = flattened page with detections drawn on it
+// page = the clean flattened drawing (canvas); pageToWorld = { sx, sy, ox, oy }:
+//   worldX = ox + pageX * sx, worldY = oy + pageY * sy  (for cropping real pen strokes as textures)
+// Visual check: /fixtures/page-check.html
+// debug.masks.{black,blue,grey,red,green} (canvases, white = counted) + debug.overlay (labelled detections);
+// failed scans carry the same on err.debug (and err.debugCanvas). The display D key shows them.
 ```
 
 - Accepts an `<img>`, `<canvas>`, `ImageBitmap` or a **data URL string** (the `fort:image` payload's `dataUrl`).
@@ -59,6 +64,20 @@ Any marker colour works for the bird. Measured: round blob 0.013, triangle 0.395
 - `geometry.js`: pure maths (page px → world units, snapping, min thickness, clamps)
 - `settings.js`: HSV ranges and thresholds (+ localStorage overrides from calibration)
 - `compare.js`: fixture comparison (centre within 45 units for blocks / 35 for pigs, same material)
+
+## Drawn-forts fix (Ahmed's brief, 16:40)
+
+| Step | Status |
+|---|---|
+| 1 Debug overlay: masks per colour as canvases in `result.debug.masks.*` + `debug.overlay` (also `err.debug`); D on the display shows them | ✅ |
+| 2 Lighting normalised (divide by a blurred paper-only background) | ✅ (since P1) |
+| 3 RED: two hue ranges OR'ed (H 165-180 and 0-12), S ≥ 70, V ≥ 60 | ✅ |
+| 4 BLUE H 90-135 S ≥ 60; colours classified BEFORE black; black only if V < 80 AND S < 80, never next to blue/red/green | ✅ |
+| 5 GREY: S < 45, V 80-228 on a slightly blurred page (grainy pencil), CLOSE with 1.5% page-width kernel; thickness = max(rect, 2 × max distance transform), never shrunk | ✅ |
+| 6 Calibration swatches row | ⏳ not done (calibration screen exists instead) |
+| 7 Fixtures with red, blue, wide grey + thickness check | ✅ synthetic: `ipad-marker-pencil`, `real-markers` (real phone photo still needed) |
+
+Saving the last scan to `public/fixtures/last-scan/` needs a file write, which the browser can't do: use D on the display (photo + masks) and save the photo by hand.
 
 ## Known limits
 
