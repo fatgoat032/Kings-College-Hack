@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Angry Sketches · overlay screens</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #e8e1d0; overflow: hidden; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    #help {
+      position: fixed; left: 12px; bottom: 10px; font: 13px system-ui, sans-serif;
+      color: #2b2622; background: rgba(251, 247, 236, 0.85); padding: 6px 10px; border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="help">1 stamp · 2 turn summary A · 6 summary B · 3 winner A · 7 winner B · 4 tie · 5 banner + button · R restart · ?screen=N&amp;t=ms freezes</div>
+  <script type="module">
+    import { INK, PAPER, rng, wobblyLine, wobblyRect } from './sketch.js';
+    import {
+      drawStamp, drawTurnSummary, drawWinner, drawSketchButton, hitRect, drawTurnBanner, drawBlobDoodle,
+    } from './screens.js';
+
+    const W = 1600, H = 900, GROUND = 800;
+    const params = new URLSearchParams(location.search);
+    const frozenT = params.has('t') ? Number(params.get('t')) : null;
+    if (params.has('screen')) document.getElementById('help').style.display = 'none';
+
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const view = { scale: 1, ox: 0, oy: 0, dpr: 1 };
+    let screen = Number(params.get('screen') || 1);
+    let startedAt = performance.now();
+    let mouse = { x: -1, y: -1 };
+    let buttonRect = null;
+
+    function resize() {
+      const dpr = window.devicePixelRatio || 1;
+      const cw = Math.round(canvas.clientWidth * dpr);
+      const ch = Math.round(canvas.clientHeight * dpr);
+      if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+      view.dpr = dpr;
+      view.scale = Math.min(cw / W, ch / H);
+      view.ox = (cw - W * view.scale) / 2;
+      view.oy = (ch - H * view.scale) / 2;
+    }
+    function toWorld(cx, cy) {
+      const r = canvas.getBoundingClientRect();
+      return { x: ((cx - r.left) * view.dpr - view.ox) / view.scale, y: ((cy - r.top) * view.dpr - view.oy) / view.scale };
+    }
+
+    // a stand-in game scene so the overlays can be judged on top of something
+    function drawScene(rand) {
+      ctx.fillStyle = PAPER;
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(120, 165, 210, 0.28)';
+      ctx.lineWidth = 1.5;
+      for (let y = 70; y < GROUND; y += 38) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+      ctx.strokeStyle = 'rgba(225, 110, 110, 0.45)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(110, 0); ctx.lineTo(110, H); ctx.stroke();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3;
+      wobblyLine(ctx, -20, GROUND, W + 20, GROUND, rand, 2);
+      for (const [x, y, w, h] of [[1100, 700, 40, 200], [1300, 700, 40, 200], [1200, 590, 260, 30], [1200, 540, 40, 70]]) {
+        ctx.save(); ctx.translate(x, y);
+        ctx.fillStyle = '#e9c991'; ctx.fillRect(-w / 2, -h / 2, w, h);
+        ctx.strokeStyle = '#4a3220'; ctx.lineWidth = 3; wobblyRect(ctx, w, h, rand);
+        ctx.restore();
+      }
+      drawBlobDoodle(ctx, 1200, 770, 28, rand);
+      drawBlobDoodle(ctx, 1420, 770, 28, rand);
+    }
+
+    const SCREENS = {
+      1: (t, rand) => { drawTurnBanner(ctx, { team: 'A' }, rand); drawStamp(ctx, 'CLEARED!', t, rand); },
+      2: (t, rand) => drawTurnSummary(ctx, { team: 'A', blobs: 3, blobsTotal: 4, birds: 2, birdsTotal: 3 }, t, rand),
+      6: (t, rand) => drawTurnSummary(ctx, { team: 'B', blobs: 1, blobsTotal: 5, birds: 3, birdsTotal: 3 }, t, rand),
+      3: (t, rand) => (buttonRect = drawWinner(ctx, { winner: 'A', blobs: { A: 4, B: 3 }, birds: { A: 2, B: 3 } }, t, rand, { hover: hitRect(buttonRect, mouse.x, mouse.y) })),
+      7: (t, rand) => (buttonRect = drawWinner(ctx, { winner: 'B', blobs: { A: 2, B: 3 }, birds: { A: 3, B: 3 } }, t, rand, { hover: hitRect(buttonRect, mouse.x, mouse.y) })),
+      4: (t, rand) => (buttonRect = drawWinner(ctx, { winner: null, blobs: { A: 3, B: 3 }, birds: { A: 3, B: 3 } }, t, rand, { hover: hitRect(buttonRect, mouse.x, mouse.y) })),
+      5: (t, rand) => {
+        drawTurnBanner(ctx, { team: 'A' }, rand);
+        ctx.save(); ctx.translate(0, 120); drawTurnBanner(ctx, { team: 'B' }, rand); ctx.restore();
+        buttonRect = { x: 560, y: 380, w: 480, h: 130 };
+        drawSketchButton(ctx, buttonRect, 'Play again', rand, { hover: hitRect(buttonRect, mouse.x, mouse.y) });
+        drawSketchButton(ctx, { x: 560, y: 570, w: 480, h: 130 }, 'Hovered', rand, { hover: true });
+      },
+    };
+
+    function frame(now) {
+      resize();
+      const t = frozenT ?? now - startedAt;
+      const rand = rng(Math.floor((frozenT ?? now) / 110) * 7919 + 1);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#e8e1d0';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(view.scale, 0, 0, view.scale, view.ox, view.oy);
+      drawScene(rand);
+      (SCREENS[screen] || SCREENS[1])(t, rand);
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (SCREENS[e.key]) { screen = Number(e.key); buttonRect = null; startedAt = performance.now(); }
+      if (e.key === 'r' || e.key === 'R') startedAt = performance.now();
+    });
+    canvas.addEventListener('pointermove', (e) => { mouse = toWorld(e.clientX, e.clientY); });
+    canvas.addEventListener('pointerdown', (e) => {
+      const p = toWorld(e.clientX, e.clientY);
+      if (hitRect(buttonRect, p.x, p.y)) startedAt = performance.now();
+    });
+
+    const font = typeof FontFace !== 'undefined'
+      ? new FontFace('Permanent Marker', 'url(/assets/fonts/PermanentMarker-Regular.ttf)').load().then((f) => document.fonts.add(f)).catch(() => {})
+      : Promise.resolve();
+    font.finally(() => { window.fontReady = true; startedAt = performance.now(); requestAnimationFrame(frame); });
+  </script>
+</body>
+</html>
