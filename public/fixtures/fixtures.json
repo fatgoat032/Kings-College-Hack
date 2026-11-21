@@ -24,6 +24,18 @@
     "note": "No green pig: must fail with a friendly error"
   },
   {
+    "name": "ipad-marker-pencil",
+    "image": "ipad-marker-pencil.svg",
+    "expected": "ipad-marker-pencil.expected.json",
+    "note": "iPad Notes MARKER (translucent red/blue) + wide grainy PENCIL: the team's real failure"
+  },
+  {
+    "name": "real-markers",
+    "image": "real-markers.svg",
+    "expected": "real-markers.expected.json",
+    "note": "Real-marker problems: dark blue ice, red TNT, WIDE hatched pencil stone"
+  },
+  {
     "name": "digital-ipad",
     "image": "digital-ipad.svg",
     "expected": "digital-ipad.expected.json",

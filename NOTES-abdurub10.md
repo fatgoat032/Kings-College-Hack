@@ -65,6 +65,20 @@ Any marker colour works for the bird. Measured: round blob 0.013, triangle 0.395
 - `settings.js`: HSV ranges and thresholds (+ localStorage overrides from calibration)
 - `compare.js`: fixture comparison (centre within 45 units for blocks / 35 for pigs, same material)
 
+## Drawn-forts fix (Ahmed's brief, 16:40)
+
+| Step | Status |
+|---|---|
+| 1 Debug overlay: masks per colour as canvases in `result.debug.masks.*` + `debug.overlay` (also `err.debug`); D on the display shows them | ✅ |
+| 2 Lighting normalised (divide by a blurred paper-only background) | ✅ (since P1) |
+| 3 RED: two hue ranges OR'ed (H 165-180 and 0-12), S ≥ 70, V ≥ 60 | ✅ |
+| 4 BLUE H 90-135 S ≥ 60; colours classified BEFORE black; black only if V < 80 AND S < 80, never next to blue/red/green | ✅ |
+| 5 GREY: S < 45, V 80-228 on a slightly blurred page (grainy pencil), CLOSE with 1.5% page-width kernel; thickness = max(rect, 2 × max distance transform), never shrunk | ✅ |
+| 6 Calibration swatches row | ⏳ not done (calibration screen exists instead) |
+| 7 Fixtures with red, blue, wide grey + thickness check | ✅ synthetic: `ipad-marker-pencil`, `real-markers` (real phone photo still needed) |
+
+Saving the last scan to `public/fixtures/last-scan/` needs a file write, which the browser can't do: use D on the display (photo + masks) and save the photo by hand.
+
 ## Known limits
 
 - A diagonal block touching another block of the same colour can be lost when the blob is split into bars.
