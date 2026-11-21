@@ -43,6 +43,7 @@ export function integrate({ net, ui, canvas }) {
   let parseFort = null;
   let sampleIdx = 0;
   let parsing = 0; // id of the newest parse, so a slow old one can't win
+  let levelLoaded = false;
 
   const gameReady = loadGame(canvas)
     .then((g) => {
@@ -68,6 +69,7 @@ export function integrate({ net, ui, canvas }) {
       const res = game.loadLevel(level);
       if (res && res.ok === false) return; // levelError handler shows the message
     }
+    levelLoaded = true;
     ui.hideCard();
     net.send(EVENTS.LEVEL_READY, { blocks: level.blocks.length, pigs: level.pigs.length });
   }
@@ -85,7 +87,7 @@ export function integrate({ net, ui, canvas }) {
   }
 
   net.on(EVENTS.FORT_IMAGE, async ({ dataUrl } = {}) => {
-    if (phase !== 'draw' && phase !== 'scan') return;
+    if (phase !== 'draw' && phase !== 'scan' && !(phase === 'fling' && !levelLoaded)) return;
     const id = ++parsing;
     ui.card('Scanning fort…', 'Turning your drawing into a level', []);
     try {
@@ -106,7 +108,7 @@ export function integrate({ net, ui, canvas }) {
 
   // keyboard shortcuts for the operator: S = sample fort, N = next
   window.addEventListener('keydown', (e) => {
-    if ((e.key === 's' || e.key === 'S') && (phase === 'draw' || phase === 'scan')) useSample();
+    if ((e.key === 's' || e.key === 'S') && (phase === 'draw' || phase === 'scan' || (phase === 'fling' && !levelLoaded))) useSample();
     if (e.key === 'n' || e.key === 'N') net.send(EVENTS.NEXT, {});
   });
 
@@ -114,6 +116,7 @@ export function integrate({ net, ui, canvas }) {
     onPhase(p, state) {
       phase = p;
       const { attacker, defender } = state.turn;
+      if (p !== 'fling') levelLoaded = false;
       if (p === 'draw') {
         game?.reset?.();
         ui.card(`Team ${defender}: draw a fort!`, 'Black = wood · blue = ice · grey = stone · red = TNT · green blobs = pigs. Then tap “Scan fort” on your phone.', [
@@ -124,8 +127,16 @@ export function integrate({ net, ui, canvas }) {
           { label: 'Use sample fort', onClick: useSample },
         ]);
       } else if (p === 'fling') {
-        ui.hideCard();
-        if (!game) ui.card('Fling!', `Team ${attacker} is attacking. (Game module not merged yet.)`, []);
+        if (!levelLoaded) {
+          // the display was reloaded mid-attack: the fort is gone, so rebuild it
+          ui.card('Fort lost', 'The screen was reloaded. Load a fort to restart this attack.', [
+            { label: 'Use sample fort', onClick: useSample },
+          ]);
+        } else if (!game) {
+          ui.card('Fling!', `Team ${attacker} is attacking. (Game module not merged yet.)`, []);
+        } else {
+          ui.hideCard();
+        }
       }
     },
     onResult(r) {
