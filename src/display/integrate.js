@@ -121,11 +121,11 @@ export function integrate({ net, ui, canvas }) {
       if (p !== 'fling') levelLoaded = false;
       if (p === 'draw') {
         game?.reset?.();
-        ui.card(`Team ${defender}: draw a fort!`, 'Black = wood · blue = ice · grey = stone · red = TNT · green blobs = pigs. Then tap “Scan fort” on your phone.', [
+        ui.card(`Team ${defender}: draw a fort!`, 'Black = wood · blue = ice · grey = stone · red = TNT · green blobs = pigs. On paper, tap “Scan fort” on a phone. On an iPad, draw on a white page, save it, then tap “Upload drawing”.', [
           { label: 'Use sample fort', onClick: useSample },
         ]);
       } else if (p === 'scan') {
-        ui.card('Waiting for the photo…', `Team ${defender}, tap “Scan fort” on a phone.`, [
+        ui.card('Waiting for the photo…', `Team ${defender}, tap “Scan fort” or “Upload drawing” on a phone.`, [
           { label: 'Use sample fort', onClick: useSample },
         ]);
       } else if (p === 'fling') {

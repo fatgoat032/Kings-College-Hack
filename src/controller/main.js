@@ -126,14 +126,14 @@ function start(code, name) {
       }
       case 'draw':
         if (amDefender) {
-          msg(`Round ${round}: draw your fort`, `Team ${defender} builds. Draw on white paper, then scan it.`, { legend: true, scan: true });
+          msg(`Round ${round}: draw your fort`, `Team ${defender} builds. On paper: draw, then tap Scan fort. On an iPad: draw on a white page (Notes), save it, then tap Upload drawing.`, { legend: true, scan: true });
         } else {
           msg('Get ready…', `Team ${defender} is drawing a fort for you to smash.`, { upload: true });
         }
         break;
       case 'scan':
         if (amDefender) {
-          msg('Scanning…', scanning ? 'Photo sent! Check the big screen.' : 'If the big screen shows an error, scan again.', { scan: true });
+          msg('Scanning…', scanning ? 'Photo sent! Check the big screen.' : 'If the big screen shows an error, scan or upload again.', { scan: true });
         } else {
           msg('Scanning…', `Team ${defender}'s fort is being built.`, { upload: true });
         }
