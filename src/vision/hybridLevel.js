@@ -28,7 +28,7 @@ export function decideShapes(shapes, claude) {
   const byN = new Map((claude || []).map((c) => [c.n, c]));
   return shapes.map((s) => {
     const c = byN.get(s.n);
-    const own = hsvColour(s.meanColour);
+    const own = s.guess ?? hsvColour(s.meanColour);
     if (c && c.confidence >= MIN_CONFIDENCE) {
       const kind = c.kind === 'ignore' ? 'ignore' : c.colour === 'green' || c.kind === 'pig' ? 'pig' : 'block';
       return { ...s, colour: c.colour, kind, by: 'claude' };

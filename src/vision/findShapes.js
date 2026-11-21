@@ -3,7 +3,7 @@
 //   (drop < 0.3% of the page) -> approxPolyDP 1% -> rect if near-rectangular, else poly.
 //   Each shape gets meanColour (of its own ink pixels) and a number on an annotated image
 //   that /api/classify (Claude) reads.
-import { preparePage } from './pipeline.js';
+import { preparePage, detect } from './pipeline.js';
 import { normaliseRect, snapAngle } from './geometry.js';
 import { POLY_MAX_VERTICES } from '../shared/level.js';
 
@@ -104,6 +104,70 @@ export function findShapes(cv, imageData, settings) {
       shapes,
       paperFound,
       canvases: { annotated: toCanvas(ann), clean: toCanvas(rgb), ink: toCanvas(ink) },
+    };
+  } finally {
+    for (const m of mats) {
+      try { m.delete(); } catch { /* already freed */ }
+    }
+  }
+}
+
+const GUESS_OF_MATERIAL = { wood: 'black', ice: 'blue', stone: 'grey', tnt: 'red' };
+
+/**
+ * Fix-up of the brief (agreed on the board): shapes come from the PER-COLOUR masks, so
+ * touching blocks of different colours stay separate. Each shape keeps the OpenCV colour as
+ * its `guess`; Claude then confirms or corrects every numbered shape (red vs pink, blue vs
+ * black, grey pencil, pig/ignore).
+ * @returns same shape as findShapes()
+ */
+export function findShapesByColour(cv, imageData, settings) {
+  const found = detect(cv, imageData, settings);
+  const mats = [found.debug.page, found.debug.flat, ...Object.values(found.debug.masks)];
+  try {
+    const shapes = [];
+    for (const b of found.blocks) {
+      const rect = normaliseRect(b);
+      rect.angleDeg = snapAngle(rect.angleDeg, settings.snapDegrees);
+      shapes.push({
+        n: shapes.length + 1, type: 'rect', rect, guess: GUESS_OF_MATERIAL[b.material],
+        circle: { cx: b.cx, cy: b.cy, r: Math.max(b.w, b.h) / 2 }, meanColour: [0, 0, 0], area: b.area,
+      });
+    }
+    for (const p of found.pigs) {
+      shapes.push({
+        n: shapes.length + 1, type: 'rect', rect: { cx: p.cx, cy: p.cy, w: 2 * p.r, h: 2 * p.r, angleDeg: 0 },
+        guess: 'green', circle: { cx: p.cx, cy: p.cy, r: p.r }, meanColour: [0, 0, 0], area: p.area,
+      });
+    }
+
+    // numbered outlines over the clean page, for Claude
+    const ann = found.debug.flat.clone();
+    mats.push(ann);
+    const pink = new cv.Scalar(255, 0, 200);
+    for (const s of shapes) {
+      if (s.guess === 'green') {
+        cv.circle(ann, new cv.Point(s.circle.cx, s.circle.cy), Math.round(s.circle.r), pink, 3);
+      } else {
+        const pts = cv.RotatedRect.points({ center: { x: s.rect.cx, y: s.rect.cy }, size: { width: s.rect.w, height: s.rect.h }, angle: s.rect.angleDeg });
+        for (let i = 0; i < 4; i++) cv.line(ann, pts[i], pts[(i + 1) % 4], pink, 3);
+      }
+      const at = new cv.Point(Math.max(4, s.rect.cx - 12), Math.max(24, s.rect.cy + 10));
+      cv.putText(ann, String(s.n), at, cv.FONT_HERSHEY_SIMPLEX, 0.9, new cv.Scalar(255, 255, 255), 6);
+      cv.putText(ann, String(s.n), at, cv.FONT_HERSHEY_SIMPLEX, 0.9, new cv.Scalar(200, 0, 160), 2);
+    }
+    const toCanvas = (mat) => {
+      const c = document.createElement('canvas');
+      cv.imshow(c, mat);
+      return c;
+    };
+    return {
+      pageW: found.pageW,
+      pageH: found.pageH,
+      shapes,
+      paperFound: found.paperFound,
+      canvases: { annotated: toCanvas(ann), clean: toCanvas(found.debug.flat), ink: toCanvas(found.debug.masks.black) },
+      masks: Object.fromEntries(Object.entries(found.debug.masks).map(([k, m]) => [k, toCanvas(m)])),
     };
   } finally {
     for (const m of mats) {

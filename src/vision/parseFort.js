@@ -18,7 +18,7 @@ import { loadCv } from './opencv.js';
 import { detect } from './pipeline.js';
 import { buildLevel, checkLevel, pageTransform } from './geometry.js';
 import { loadSettings } from './settings.js';
-import { findShapes } from './findShapes.js';
+import { findShapesByColour } from './findShapes.js';
 import { decideShapes, shapesToLevel, layoutToLevel } from './hybridLevel.js';
 import { CLASSIFY_MAX_SHAPES } from '../shared/classify.js';
 
@@ -148,7 +148,7 @@ async function parseFortHybrid(imageSource, options) {
   const cv = await loadCv();
   const settings = options.settings ?? loadSettings();
   const imageData = await toImageData(imageSource);
-  const fs = findShapes(cv, imageData, settings);
+  const fs = findShapesByColour(cv, imageData, settings);
   const jpeg = (c) => c.toDataURL('image/jpeg', 0.85);
   const meta = { imageW: imageData.width, imageH: imageData.height, paperFound: fs.paperFound };
 
@@ -181,7 +181,7 @@ async function parseFortHybrid(imageSource, options) {
     debugCanvas: fs.canvases.annotated,
     page: fs.canvases.clean,
     pageToWorld: pageTransform(fs.pageW, fs.pageH),
-    debug: { overlay: copy(fs.canvases.annotated), masks: { ink: fs.canvases.ink } },
+    debug: { overlay: copy(fs.canvases.annotated), masks: fs.masks },
     warnings: fs.paperFound ? [] : ['Paper edges not found: used the whole photo'],
     timings: { claude: claudeMs, total: performance.now() - t0 },
   };
