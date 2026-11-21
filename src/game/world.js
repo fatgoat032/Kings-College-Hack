@@ -17,6 +17,47 @@ export function checkLevel(level) {
 }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// Axis-aligned half extents of a (possibly rotated) block.
+function extents(b) {
+  const c = Math.abs(Math.cos(b.angle || 0));
+  const s = Math.abs(Math.sin(b.angle || 0));
+  return { hw: (b.w * c + b.h * s) / 2, hh: (b.w * s + b.h * c) / 2 };
+}
+
+// Hand-drawn forts arrive with crossing lines: a plank drawn through the top of
+// a post, a post that stops short of the ground. Overlapping bodies get shoved
+// apart by the physics engine, so the fort jumps on load. This stacks each
+// block exactly on whatever it was drawn resting on (bottom-up), and sits each
+// blob on the surface under it. Positions only move by the overlap or gap.
+export function fitLevel(level, pigScale = 1) {
+  const blocks = level.blocks.map((b) => ({ ...b }));
+  const order = [...blocks].sort((a, b) => (b.y + extents(b).hh) - (a.y + extents(a).hh));
+  const placed = [];
+  const supportUnder = (x, hw, y, hh) => {
+    let top = WORLD.groundY;
+    for (const q of placed) {
+      const e = extents(q);
+      const overlapX = Math.min(x + hw, q.x + e.hw) - Math.max(x - hw, q.x - e.hw);
+      if (overlapX < 4) continue;
+      // only things drawn clearly below count as support (not side-by-side neighbours)
+      if (q.y - y < (hh + e.hh) * 0.45) continue;
+      top = Math.min(top, q.y - e.hh);
+    }
+    return top;
+  };
+  for (const b of order) {
+    const { hw, hh } = extents(b);
+    b.y = supportUnder(b.x, hw, b.y, hh) - hh;
+    placed.push(b);
+  }
+  const pigs = level.pigs.map((p) => {
+    const r = clampPigR(p.r) * pigScale;
+    const top = supportUnder(p.x, r * 0.6, p.y, r);
+    return { ...p, y: top - r, r: p.r };
+  });
+  return { ...level, blocks, pigs };
+}
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createWorld() {
@@ -84,6 +125,7 @@ export function createWorld() {
     w.lastTrail = [];
     w.slowMo = null;
     w.timeScale = 1;
+    frozen = false;
     addGround();
   }
 
@@ -120,19 +162,20 @@ export function createWorld() {
     }
     clearWorld();
     w.level = level;
-    for (const b of level.blocks) {
+    const fitted = fitLevel(level, PIG.sizeBoost);
+    for (const b of fitted.blocks) {
       const m = MATERIALS[b.material];
       const body = Bodies.rectangle(b.x, b.y, b.w, b.h, {
         angle: b.angle || 0, density: m.density, friction: m.friction, frictionStatic: 1,
         restitution: m.restitution, label: 'block',
       });
       Composite.add(engine.world, body);
-      w.blocks.set(body.id, { body, material: b.material, w: b.w, h: b.h, id: b.id, hp: m.hp, maxHp: m.hp, cracked: false, src: b });
+      const src = level.blocks.find((o) => o.id === b.id) || b; // original position, for photo textures
+      w.blocks.set(body.id, { body, material: b.material, w: b.w, h: b.h, id: b.id, hp: m.hp, maxHp: m.hp, cracked: false, src });
     }
-    for (const p of level.pigs) {
-      const r0 = clampPigR(p.r);
-      const r = r0 * PIG.sizeBoost;
-      const body = Bodies.circle(p.x, p.y - (r - r0), r, {
+    for (const p of fitted.pigs) {
+      const r = clampPigR(p.r) * PIG.sizeBoost;
+      const body = Bodies.circle(p.x, p.y, r, {
         density: 0.0012, friction: 0.6, restitution: 0.1, label: 'pig',
       });
       Composite.add(engine.world, body);
@@ -141,10 +184,29 @@ export function createWorld() {
     w.birdsUsed = 0;
     w.pigsAtStart = w.pigs.size;
     w.lastKill = null;
+    freezeFort(true);
     w.settleUntil = w.time + TIMING.settleMs + (opts.revealMs || 0);
     setPhase('settling');
     emit('levelLoaded', { blocks: w.blocks.size, pigs: w.pigs.size });
     return check;
+  }
+
+  // The fort holds exactly as drawn until a shot comes close, then physics takes over.
+  let frozen = false;
+  function freezeFort(on) {
+    frozen = on;
+    for (const b of w.blocks.values()) Body.setStatic(b.body, on);
+    for (const p of w.pigs.values()) Body.setStatic(p.body, on);
+  }
+  function fortNear(pos, margin) {
+    for (const b of w.blocks.values()) {
+      const bb = b.body.bounds;
+      if (pos.x > bb.min.x - margin && pos.x < bb.max.x + margin && pos.y > bb.min.y - margin && pos.y < bb.max.y + margin) return true;
+    }
+    for (const p of w.pigs.values()) {
+      if (Math.hypot(pos.x - p.body.position.x, pos.y - p.body.position.y) < p.r + margin) return true;
+    }
+    return false;
   }
 
   // ---- input ----
@@ -490,6 +552,7 @@ export function createWorld() {
     }
 
     const bird = w.bird;
+    if (frozen && bird && fortNear(bird.body.position, bird.r + 90)) freezeFort(false);
     if (bird && (w.phase === 'flying' || w.phase === 'cleared')) {
       const p = bird.body.position;
       const last = w.trail[w.trail.length - 1];
