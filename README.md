@@ -1,59 +1,65 @@
-# Hackathon agent board
+# Angry Sketches
 
-![The hacking floor at Cal Hacks](docs/banner.jpg)
+**Draw a fortress on paper. Your friends knock it down with their phones.**
 
-One pinned GitHub issue that every teammate's coding agent posts to. Agents tag each other by GitHub username, and each one waits for its own tag, so my agent can hand work to my teammate's agent without either of us sending a text.
+Team A draws a fort on plain paper with coloured markers. A phone photo turns the drawing into a physics level on the big screen. Team B uses their phones as the slingshot: drag back, let go, tap for the bird's power. Pigs die, blocks fall, then the teams swap.
 
-Full walkthrough with the templates and an FAQ: **[marvelous-relative-5de.notion.site/hack](https://marvelous-relative-5de.notion.site/hack)**
+Track: **Retro Remix (Old Tech, New Tricks)**. Pen and paper is the level editor.
+
+| Drawn with | Becomes |
+|---|---|
+| black marker | wood |
+| blue | ice (light, shatters) |
+| pencil / grey | stone (heavy) |
+| red | TNT (explodes) |
+| green blobs | pigs |
+
+## Play it
+
+You need Node 20+, one laptop for the big screen, and phones on the same Wi-Fi or hotspot.
+
+```bash
+npm install
+npm run dev          # Vite on :5173 (LAN) + Socket.io server on :3000
+```
+
+1. On the laptop, open `http://localhost:5173/display.html` fullscreen. It shows a room code and a QR code.
+2. Each player scans the QR and enters a name. Teams are balanced automatically.
+3. Press **Start game**. The defending team draws a fort and taps **Scan fort** on a phone.
+4. The attacking team flings: drag back from the centre of the phone screen and let go. Tap mid-flight for the bird's ability. 3 birds per turn, shooters rotate.
+5. After both teams attack, the higher score wins the round.
+
+Display keys: **S** use a sample fort (backup if a scan fails), **N** next, **L** event log.
+Lighting calibration for vision: `/src/vision/calibrate.html`.
 
 ## How it works
 
-```mermaid
-sequenceDiagram
-    participant A as Sam's agent
-    participant B as Board (pinned issue)
-    participant C as Priya's agent
-    A->>B: [Sam's Claude] login page is merged, @priya-dev can you add the API route?
-    Note over C: tools/board wait wakes up on the @priya-dev tag
-    B->>C: new post, flagged MENTION
-    C->>B: [Priya's Codex] @sam-dev the route is up on main
+```
+ phone (controller.html)                 big screen (display.html)
+ slingshot pad, camera  ── socket.io ──▶  server phase machine ──▶ parseFort(photo) ──▶ Level JSON
+                                          lobby → draw → scan          (OpenCV.js)          │
+                                          → fling → result                                 ▼
+                         ◀── room:state ──                         createGame(canvas) (Matter.js)
 ```
 
-1. Split the project up at kickoff and give each person their own folders. The owner table in `AGENTS.md` says whose folders are whose, and every agent reads it.
-2. Pin one issue as the board. Every agent posts there when it finishes something or needs something.
-3. Tag the teammate. Each agent keeps `tools/board wait` running, which wakes it up when someone else posts and flags the post when it tags you.
+- **Vision** (`src/vision/`): OpenCV.js runs in the browser. It finds the paper, warps it flat, evens out lighting, masks each colour in HSV, then turns strokes into rotated rectangles (blocks) and green blobs into circles (pigs). It maps the page into the fort zone and validates the result. Runs offline, under a second.
+- **Game** (`src/game/`): Matter.js physics with a hand-drawn notebook renderer. Wood, ice, stone and TNT behave differently, 4 shot types have one-time abilities, a slow-motion instant replay plays the final blow, and all sound is synthesised with Web Audio.
+- **Network** (`server/`, `src/net/`, `src/controller/`, `src/display/`): Express + Socket.io. Rooms are 4-letter codes, teams auto-balance, phones keep their team after a reconnect, and aim is throttled to 20/s. The server owns turn order and rejects out-of-turn input.
+- **Contracts** (`src/shared/`): a Level JSON schema with `validateLevel()`, and the socket event list. These are the only things the three parts share.
 
-## Used at
+## Tests
 
-My teams ran this at two hackathons, and both boards are public if you want to scroll through them.
+- `npm test`: end-to-end socket flow (teams, permissions, reconnect, scoring, team swap).
+- `/fixtures/fixtures.test.html`: vision fixtures, expected against actual.
+- `/src/game/dev.html`: the game on its own, with mouse and keyboard.
+- `/src/net/fake-display.html?room=XXXX`: logs every event, for testing phones without the game.
 
-- **Knight Hacks**, UCF's hackathon. The [Farsight board](https://github.com/azizu06/farsight/issues/24) hit 1,182 posts, and Farsight won four sponsor tracks.
-- **Cal Hacks**, UC Berkeley's hackathon. The [Backrooms board](https://github.com/azizu06/backrooms/issues/1) hit 988 posts, and Backrooms won a Hyphenate track prize.
+## How we built it
 
-## Setup in 5 minutes
+Three people, each running a Claude Code agent with strict folder ownership: vision (`abdurub10`), game (`fatgoat032`), and network plus integration (`Ahmeds-abbas`). The agents coordinate on a pinned GitHub issue used as a message board (`tools/board`, rules in `AGENTS.md`). Everyone wrote against the frozen contracts in `src/shared/` from hour 1, so nobody waited on anybody.
 
-1. Click **Use this template** to make your hackathon repo from this one.
-2. Open a new issue from the **Message board** template and pin it. If it's the first issue in the repo it's #1 and you can skip the next step.
-3. If it isn't issue #1, every teammate sets `export BOARD_ISSUE=<number>`.
-4. Fill in your team's GitHub logins and the owner table in `AGENTS.md`.
-5. Every teammate runs `gh auth login` once, then `tools/board whoami` to check it works.
+## Credits
 
-## Commands
-
-| Command | What it does |
-|---|---|
-| `tools/board post "[Sam's Claude] ..."` | Posts to the board. Every post starts with whose agent it is. |
-| `tools/board unread` | Shows posts since your last check and flags the ones that tag you. |
-| `tools/board wait` | Blocks until someone else posts, then prints it. |
-| `tools/board read -n 20` | Shows the last 20 posts. |
-| `tools/board whoami` | Prints your GitHub login so you can check `gh` is set up. |
-
-`tools/board wait` checks once every 30 seconds, and when nothing is new that check is one API call, so a whole team stays well under GitHub's rate limit. Use `--interval 60` if a lot of agents share one account.
-
-## Works with any coding agent
-
-The script only needs `bash` and `gh`, so any agent that can run a shell command can use it. Claude Code also gets the hooks in `.claude/`, which show unread posts when a session starts and on every prompt, and `CLAUDE.md` pulls in the rules from `AGENTS.md`. Every other agent reads `AGENTS.md` and runs `tools/board unread` before each task.
-
-## Requirements
-
-`bash`, `git`, and the [GitHub CLI](https://cli.github.com) logged in with `gh auth login`.
+- Shot types and physics tuning are adapted from [yumin-jung/angry-birds](https://github.com/yumin-jung/angry-birds). All characters and art are our own.
+- [Matter.js](https://brm.io/matter-js/), [OpenCV.js](https://docs.opencv.org/), [Socket.io](https://socket.io/), [Vite](https://vitejs.dev/), [qrcode](https://github.com/soldair/node-qrcode).
+- Font: Permanent Marker (Apache 2.0).
