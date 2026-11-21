@@ -53,9 +53,12 @@ export async function parseFort(imageSource, options = {}) {
   const page = document.createElement('canvas');
   // Per-colour masks as canvases (white = pixels counted as that colour), for the
   // display's D debug overlay: debug.masks.{black,blue,grey,red,green} + debug.overlay.
-  const debug = { overlay: debugCanvas, masks: {} };
+  // overlay is its own canvas (not debugCanvas itself): a canvas element can only sit in one
+  // place in the page, so sharing it would leave one of them blank in the D overlay.
+  const debug = { overlay: document.createElement('canvas'), masks: {} };
   try {
     cv.imshow(debugCanvas, found.debug.page);
+    cv.imshow(debug.overlay, found.debug.page);
     cv.imshow(page, found.debug.flat);
     for (const [name, m] of Object.entries(found.debug.masks)) {
       const c = document.createElement('canvas');
