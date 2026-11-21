@@ -254,12 +254,12 @@ export function createRenderer(canvas, world) {
     ctx.restore();
   }
 
+  // block is a scene entry: { k, material, w, h, x, y, angle }
   function drawBlock(block, rand) {
     const s = STYLE[block.material];
-    const { position, angle } = block.body;
-    const { w, h } = block;
+    const { w, h, angle } = block;
     ctx.save();
-    ctx.translate(position.x, position.y);
+    ctx.translate(block.x, block.y);
     ctx.rotate(angle);
     ctx.fillStyle = s.fill;
     ctx.fillRect(-w / 2, -h / 2, w, h);
@@ -305,8 +305,8 @@ export function createRenderer(canvas, world) {
   }
 
   // ---- effects ----
-  function drawEffects(rand) {
-    for (const fx of world.effects) {
+  function drawEffects(rand, effects) {
+    for (const fx of effects) {
       const t = fx.life / fx.max;
       ctx.globalAlpha = Math.max(0, Math.min(1, t * 1.5));
       if (fx.type === 'debris') {
@@ -417,12 +417,91 @@ export function createRenderer(canvas, world) {
         if (world.birdsUsed === 0 && t < TIMING.bannerMs) banner('FLING!', 'pull back on your phone and let go', '#e2483d', t);
         break;
       case 'destroyed':
-        banner('FORT DESTROYED!', `${world.score.toLocaleString('en-GB')} points`, '#e2483d', t);
+        banner('FORT DESTROYED!', `${world.score.toLocaleString('en-GB')} points`, '#e2483d',
+          replay.endedAt >= 0 ? now - replay.endedAt : t);
         break;
       case 'outOfBirds':
         banner('OUT OF SHOTS', `${world.pigs.size} blob${world.pigs.size === 1 ? '' : 's'} survived`, '#2f78ad', t);
         break;
     }
+  }
+
+  // ---- scene snapshots (for the slow-motion replay) ----
+  function snapshot() {
+    return {
+      blocks: [...world.blocks.values()].map((b) => ({
+        k: b.body.id, material: b.material, w: b.w, h: b.h,
+        x: b.body.position.x, y: b.body.position.y, angle: b.body.angle,
+      })),
+      pigs: [...world.pigs.values()].map((p) => ({
+        k: p.body.id, r: p.r, x: p.body.position.x, y: p.body.position.y, angle: p.body.angle,
+      })),
+      bird: world.bird
+        ? { x: world.bird.body.position.x, y: world.bird.body.position.y, angle: world.bird.body.angle }
+        : null,
+      effects: world.effects.map((fx) => ({ ...fx })),
+    };
+  }
+
+  const REPLAY_FRAMES = 1200; // whole shot kept in memory, even on 120 Hz screens
+  const REPLAY_SPEED = 0.35;
+  const history = [];
+  const replay = { active: false, frames: null, i: 0, endedAt: -1, lastKill: -1 };
+
+  world.on('launch', () => {
+    history.length = 0;
+    replay.endedAt = -1;
+    replay.lastKill = -1;
+  });
+  // Centre the replay on the moment the last blob popped, not on the quiet
+  // 1.5 s of settling that ends the shot.
+  world.on('pigKilled', () => { replay.lastKill = history.length; });
+  world.on('fortDestroyed', () => {
+    const end = replay.lastKill >= 0 ? Math.min(history.length, replay.lastKill + 45) : history.length;
+    const frames = history.slice(Math.max(0, end - 110), end);
+    if (frames.length < 20) return;
+    replay.frames = frames;
+    replay.i = 0;
+    replay.active = true;
+  });
+
+  function drawScene(scene, rand, seed, showSlingAim) {
+    for (const block of scene.blocks) drawBlock(block, rng(block.k * 31 + seed));
+    for (const pig of scene.pigs) drawBlob(pig.x, pig.y, pig.r, pig.angle, rng(pig.k * 17 + seed));
+
+    if (showSlingAim) {
+      const p = pulledPos();
+      if (world.aimState.power > 0.02) drawTrajectory();
+      drawBand(fork.back, p);
+      drawPaperBall(p.x, p.y, BIRD.radius, 0, rand, 7);
+      drawBand(fork.front, p);
+    } else {
+      drawBand(fork.back, fork.front);
+    }
+    drawSlingFront(rand);
+
+    if (scene.bird) drawPaperBall(scene.bird.x, scene.bird.y, BIRD.radius, scene.bird.angle, rand, 7);
+    drawEffects(rand, scene.effects);
+  }
+
+  function drawReplayOverlay(now) {
+    // film-style letterbox bars and a blinking REPLAY tag
+    ctx.fillStyle = 'rgba(43, 38, 34, 0.92)';
+    ctx.fillRect(0, 0, WORLD.w, 70);
+    ctx.fillRect(0, WORLD.h - 70, WORLD.w, 70);
+    if (Math.floor(now / 450) % 2 === 0) {
+      ctx.fillStyle = '#e2483d';
+      ctx.beginPath();
+      ctx.arc(70, 35, 12, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.font = `34px ${FONT}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = PAPER;
+    ctx.fillText('INSTANT REPLAY', 95, 37);
+    ctx.textAlign = 'right';
+    ctx.fillText('0.35×', WORLD.w - 40, 37);
   }
 
   // ---- frame ----
@@ -441,31 +520,27 @@ export function createRenderer(canvas, world) {
     drawPaper(rand);
     drawSlingBack(rand);
 
-    for (const block of world.blocks.values()) drawBlock(block, rng(block.body.id * 31 + seed));
-    for (const pig of world.pigs.values()) {
-      drawBlob(pig.body.position.x, pig.body.position.y, pig.r, pig.body.angle, rng(pig.body.id * 17 + seed));
+    if (replay.active) {
+      const frame = replay.frames[Math.min(replay.frames.length - 1, Math.floor(replay.i))];
+      drawScene(frame, rand, seed, false);
+      drawReplayOverlay(now);
+      replay.i += REPLAY_SPEED;
+      if (replay.i >= replay.frames.length) {
+        replay.active = false;
+        replay.endedAt = now;
+      }
+      return;
     }
 
-    if (world.phase === 'aiming') {
-      const p = pulledPos();
-      if (world.aimState.power > 0.02) drawTrajectory();
-      drawBand(fork.back, p);
-      drawPaperBall(p.x, p.y, BIRD.radius, 0, rand, 7);
-      drawBand(fork.front, p);
-    } else {
-      drawBand(fork.back, fork.front);
+    const scene = snapshot();
+    if (world.phase === 'flying') {
+      history.push(scene);
+      if (history.length > REPLAY_FRAMES) history.shift();
     }
-    drawSlingFront(rand);
-
-    if (world.bird) {
-      const b = world.bird.body;
-      drawPaperBall(b.position.x, b.position.y, BIRD.radius, b.angle, rand, 7);
-    }
-
-    drawEffects(rand);
+    drawScene(scene, rand, seed, world.phase === 'aiming');
     drawHud(rand, seed);
     drawBanners(now);
   }
 
-  return { draw, toWorld, view };
+  return { draw, toWorld, view, isReplaying: () => replay.active };
 }

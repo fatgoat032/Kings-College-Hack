@@ -11,7 +11,7 @@ Branch: `game`. Owns `src/game/` and `public/assets/`.
   - Phases: `waiting` → `settling` (1 s, nothing breaks) → `aiming` ⇄ `flying` → `destroyed` | `outOfBirds`.
   - `localInput: true` (default) enables mouse drag on the slingshot, arrow keys and space. Pass `false` on display.html once phones drive it.
 - `src/game/world.js`: Matter.js physics and rules, no DOM, so it runs in Node for tests.
-- `src/game/render.js`: hand-drawn notebook-style renderer (wobbly "boiling" lines, paper-ball shots, green doodle blobs as targets).
+- `src/game/render.js`: hand-drawn notebook-style renderer (wobbly "boiling" lines, paper-ball shots, green doodle blobs as targets). When a fort is destroyed it plays an INSTANT REPLAY of the final blow at 0.35× before the banner.
 - `src/game/sound.js`: all sounds synthesised with Web Audio, so there are no audio files.
 - `src/game/config.js`: every tuning number (table below).
 - `src/game/dev.html`: standalone test page, at `/src/game/dev.html` under Vite. Keys: 1/2/3 sample forts, 0 empty, M mute.
@@ -34,7 +34,7 @@ Branch: `game`. Owns `src/game/` and `public/assets/`.
 | launch speed | 6 + power × 16 |
 
 ## Not done yet (plan P3/P4)
-- Slow-motion replay of the last 3 s.
+
 - Custom bird from abdurub10's polygon.
 - Live Repair (`repair` event).
 - Session leaderboard.
