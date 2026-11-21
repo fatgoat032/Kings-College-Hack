@@ -6,13 +6,21 @@
 //
 // {
 //   "version": 1,
-//   "blocks": [ { "id": "b1", "material": "wood", "x": 1100, "y": 800, "w": 200, "h": 20, "angle": 0 } ],
+//   "blocks": [
+//     { "id": "b1", "material": "wood", "shape": "rect", "x": 1100, "y": 800, "w": 200, "h": 20, "angle": 0 },
+//     { "id": "b2", "material": "stone", "shape": "poly", "vertices": [[1200, 850], [1260, 850], [1230, 760]] }
+//   ],
 //   "pigs":   [ { "id": "p1", "x": 1150, "y": 760, "r": 22 } ],
-//   "meta":   { "source": "photo", "imageW": 1280, "imageH": 720 }
+//   "meta":   { "source": "photo", "detector": "hybrid", "imageW": 1280, "imageH": 720 }
 // }
 //
 // - material: wood (black marker), ice (blue), stone (pencil/grey), tnt (red)
-// - x, y are the block's centre; angle is in radians
+// - shape: "rect" (the default when missing, so older levels stay valid) or "poly"
+// - rect: x, y are the block's centre; angle is in radians
+// - poly: vertices are [x, y] in world units, 3 to POLY_MAX_VERTICES of them, in drawing order
+//   (convex or concave; the game decomposes concave ones). No x/y/w/h/angle needed;
+//   polygonCentroid() below gives the centre.
+// - meta.detector (optional): "hybrid" (OpenCV shapes + Claude colours) | "claude" (Claude layout) | "opencv"
 // - pigs come from green blobs; r is clamped to 14-40 (vision clamps; validateLevel rejects outside it)
 
 export const LEVEL_VERSION = 1;
@@ -28,6 +36,13 @@ export const WORLD = Object.freeze({
 export const MATERIALS = Object.freeze(['wood', 'ice', 'stone', 'tnt']);
 
 export const PIG_R = Object.freeze({ min: 14, max: 40 });
+
+export const SHAPES = Object.freeze(['rect', 'poly']);
+
+/** Most vertices a "poly" block may have. */
+export const POLY_MAX_VERTICES = 24;
+
+export const DETECTORS = Object.freeze(['hybrid', 'claude', 'opencv']);
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isId = (v) => typeof v === 'string' && v.length > 0;
@@ -64,12 +79,29 @@ export function validateLevel(level) {
       if (!b || typeof b !== 'object') return errors.push(`${where} must be an object`);
       checkId(where, b.id);
       if (!MATERIALS.includes(b.material)) errors.push(`${where}.material must be one of ${MATERIALS.join(', ')}`);
-      for (const k of ['x', 'y', 'w', 'h', 'angle']) {
-        if (!isNum(b[k])) errors.push(`${where}.${k} must be a finite number`);
+      const shape = b.shape ?? 'rect';
+      if (!SHAPES.includes(shape)) return errors.push(`${where}.shape must be one of ${SHAPES.join(', ')}`);
+      if (shape === 'rect') {
+        for (const k of ['x', 'y', 'w', 'h', 'angle']) {
+          if (!isNum(b[k])) errors.push(`${where}.${k} must be a finite number`);
+        }
+        if (isNum(b.w) && b.w <= 0) errors.push(`${where}.w must be > 0`);
+        if (isNum(b.h) && b.h <= 0) errors.push(`${where}.h must be > 0`);
+        checkInWorld(where, b.x, b.y);
+        return;
       }
-      if (isNum(b.w) && b.w <= 0) errors.push(`${where}.w must be > 0`);
-      if (isNum(b.h) && b.h <= 0) errors.push(`${where}.h must be > 0`);
-      checkInWorld(where, b.x, b.y);
+      const v = b.vertices;
+      if (!Array.isArray(v) || v.length < 3 || v.length > POLY_MAX_VERTICES) {
+        return errors.push(`${where}.vertices must be an array of 3-${POLY_MAX_VERTICES} [x, y] points`);
+      }
+      let pointsOk = true;
+      v.forEach((p, j) => {
+        if (!Array.isArray(p) || p.length !== 2 || !isNum(p[0]) || !isNum(p[1])) {
+          pointsOk = false;
+          errors.push(`${where}.vertices[${j}] must be [x, y] numbers`);
+        } else checkInWorld(`${where}.vertices[${j}]`, p[0], p[1]);
+      });
+      if (pointsOk && Math.abs(polygonArea(v)) < 1) errors.push(`${where}.vertices enclose no area`);
     });
   }
 
@@ -92,9 +124,41 @@ export function validateLevel(level) {
 
   if (level.meta !== undefined && (typeof level.meta !== 'object' || level.meta === null)) {
     errors.push('meta must be an object if present');
+  } else if (level.meta?.detector !== undefined && !DETECTORS.includes(level.meta.detector)) {
+    errors.push(`meta.detector must be one of ${DETECTORS.join(', ')}`);
   }
 
   return { ok: errors.length === 0, errors };
+}
+
+/** Signed area of a polygon given as [[x, y], ...] (shoelace formula). */
+export function polygonArea(vertices) {
+  let a = 0;
+  for (let i = 0; i < vertices.length; i++) {
+    const [x1, y1] = vertices[i];
+    const [x2, y2] = vertices[(i + 1) % vertices.length];
+    a += x1 * y2 - x2 * y1;
+  }
+  return a / 2;
+}
+
+/** Area-weighted centre [x, y] of a polygon, for placing a poly body. */
+export function polygonCentroid(vertices) {
+  const a = polygonArea(vertices);
+  if (Math.abs(a) < 1e-9) {
+    const n = vertices.length;
+    return [vertices.reduce((s, p) => s + p[0], 0) / n, vertices.reduce((s, p) => s + p[1], 0) / n];
+  }
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < vertices.length; i++) {
+    const [x1, y1] = vertices[i];
+    const [x2, y2] = vertices[(i + 1) % vertices.length];
+    const f = x1 * y2 - x2 * y1;
+    cx += (x1 + x2) * f;
+    cy += (y1 + y2) * f;
+  }
+  return [cx / (6 * a), cy / (6 * a)];
 }
 
 /** Clamp a pig radius into the allowed range (for vision and game to share). */
