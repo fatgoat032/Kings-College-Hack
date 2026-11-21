@@ -131,3 +131,33 @@ test('pageTransform matches pageToWorld exactly (for the game to crop strokes)',
     assert.ok(Math.abs(t.oy + h * t.sy - WORLD.groundY) < 1e-9, 'page bottom = ground');
   }
 });
+
+import { hsvColour, decideShapes, shapesToLevel, layoutToLevel } from '../hybridLevel.js';
+
+test('hybrid: hsvColour guesses the five ink colours', () => {
+  assert.equal(hsvColour([40, 160, 60]), 'green');
+  assert.equal(hsvColour([30, 70, 200]), 'blue');
+  assert.equal(hsvColour([200, 40, 45]), 'red');
+  assert.equal(hsvColour([30, 30, 32]), 'black');
+  assert.equal(hsvColour([170, 170, 175]), 'grey');
+});
+
+test('hybrid: Claude wins when confident, HSV otherwise, ignore dropped', () => {
+  const shapes = [{ n: 1, meanColour: [30, 30, 32] }, { n: 2, meanColour: [30, 70, 200] }, { n: 3, meanColour: [40, 160, 60] }];
+  const d = decideShapes(shapes, [{ n: 1, colour: 'red', kind: 'block', confidence: 0.9 }, { n: 2, colour: 'grey', kind: 'block', confidence: 0.2 }, { n: 3, colour: 'green', kind: 'ignore', confidence: 0.9 }]);
+  assert.deepEqual(d.map((s) => [s.colour, s.kind, s.by]), [['red', 'block', 'claude'], ['blue', 'block', 'hsv'], ['green', 'ignore', 'claude']]);
+});
+
+test('hybrid: shapes and layout become valid levels (rect + poly + pig)', () => {
+  const lv = shapesToLevel([
+    { kind: 'block', colour: 'black', type: 'rect', rect: { cx: 400, cy: 500, w: 300, h: 4, angleDeg: 0 } },
+    { kind: 'block', colour: 'grey', type: 'poly', vertices: [[100, 560], [200, 560], [150, 450]] },
+    { kind: 'pig', colour: 'green', circle: { cx: 600, cy: 540, r: 25 } },
+  ], 800, 566, { detector: 'hybrid' });
+  assert.deepEqual(validateLevel(lv), { ok: true, errors: [] });
+  assert.ok(lv.blocks[0].h >= 12, '12-unit floor');
+  assert.equal(lv.blocks[1].shape, 'poly');
+  const lay = layoutToLevel({ blocks: [{ colour: 'blue', x: 0.5, y: 0.9, w: 0.3, h: 0.05, angle: 0 }], pigs: [{ x: 0.5, y: 0.8, r: 0.03 }] }, 800, 566, { detector: 'claude' });
+  assert.deepEqual(validateLevel(lay), { ok: true, errors: [] });
+  assert.equal(lay.blocks[0].material, 'ice');
+});

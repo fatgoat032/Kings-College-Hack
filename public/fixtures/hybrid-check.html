@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>hybrid findShapes check</title>
+<body style="font:13px system-ui;margin:12px">
+<h3>findShapes + HSV colours (what the hybrid sends to Claude, and its fallback guess)</h3>
+<pre id="o">running…</pre><div id="v" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+<script type="module">
+  import { ready, findShapes, findShapesByColour, parseFort } from '/src/vision/index.js';
+  import { loadCv } from '/src/vision/opencv.js';
+  import { toImageData } from '/src/vision/parseFort.js';
+  import { decideShapes, shapesToLevel } from '/src/vision/hybridLevel.js';
+  import { loadSettings } from '/src/vision/settings.js';
+  await ready();
+  const cv = await loadCv();
+  const out = [];
+  for (const name of ['ipad-marker-pencil', 'digital-ipad', 'real-markers']) {
+    for (const [label, finder] of [['one ink mask (brief)', findShapes], ['per-colour (fix-up)', findShapesByColour]]) {
+      const fs = finder(cv, await toImageData(`./${name}.svg`), loadSettings());
+      const lv = shapesToLevel(decideShapes(fs.shapes, null), fs.pageW, fs.pageH, { detector: 'hybrid' });
+      const count = (m) => lv.blocks.filter((b) => b.material === m).length;
+      out.push(`${name} · ${label}: ${fs.shapes.length} shapes -> wood ${count('wood')} ice ${count('ice')} stone ${count('stone')} tnt ${count('tnt')} pigs ${lv.pigs.length}`);
+      fs.canvases.annotated.style.width = '270px';
+      fs.canvases.annotated.title = `${name} · ${label}`;
+      document.getElementById('v').append(fs.canvases.annotated);
+    }
+  }
+  const r = await parseFort('./digital-ipad.svg');
+  out.push(`parseFort (no Claude key here) -> detector: ${r.level.meta.detector}, ${r.level.blocks.length} blocks, ${r.level.pigs.length} pigs`);
+  document.getElementById('o').textContent = out.join('\n');
+</script>

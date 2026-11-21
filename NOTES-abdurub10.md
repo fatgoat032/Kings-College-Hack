@@ -79,6 +79,12 @@ Any marker colour works for the bird. Measured: round blob 0.013, triangle 0.395
 
 Saving the last scan to `public/fixtures/last-scan/` needs a file write, which the browser can't do: use D on the display (photo + masks) and save the photo by hand.
 
+## Team Fix #2: hybrid OpenCV + Claude (17:10 brief, A2 + A4)
+
+- `findShapes(cv, imageData, settings)` (findShapes.js): one ink mask, close 1.5%, external contours (drop < 0.3%), approxPolyDP 1%, rect if it fills >= 85% of its rotated rect else poly, meanColour of its own ink, annotated page with big numbers, clean page.
+- `parseFort(img, { detector: 'hybrid' })`: findShapesByColour (per-colour masks, touching blocks stay separate; OpenCV colour kept as each shape's guess), then POST /api/classify (or /api/layout for 0 or >60 shapes), Claude's colour if confidence >= 0.5 else our HSV guess, green = pig (min enclosing circle), meta.detector hybrid|claude. Any failure falls back to the OpenCV detector.
+- **Default is still the per-colour OpenCV detector (`meta.detector = "opencv"`).** Reason: one ink mask merges touching blocks of different colours (black pillars + blue beam + red TNT become ONE shape), so real forts came out worse. Evidence: /fixtures/hybrid-check.html. Switching the default is one line in parseFort.js once shapes come from per-colour masks.
+
 ## Known limits
 
 - A diagonal block touching another block of the same colour can be lost when the blob is split into bars.
