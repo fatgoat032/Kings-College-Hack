@@ -29,7 +29,7 @@ npm run dev          # Vite on :5173 (LAN) + Socket.io server on :3000
 4. The attacking team flings: drag back from the centre of the phone screen and let go. Tap mid-flight for the bird's ability. 3 birds per turn, shooters rotate.
 5. After both teams attack, the higher score wins the round.
 
-Display keys: **S** use a sample fort (backup if a scan fails), **N** next, **L** event log, **D** vision debug overlay of the last scan, **H** motion debug HUD, **C** switch fort detector (OpenCV / hybrid OpenCV + Claude).
+Display keys: **S** use a sample fort (backup if a scan fails), **N** next, **L** event log, **D** vision debug overlay of the last scan, **H** motion debug HUD, **C** switch fort detector (auto / hybrid / Claude-only / OpenCV; M is mute).
 
 Claude scanning: put `ANTHROPIC_API_KEY=...` in `.env` in the repo root (git-ignored, see `.env.example`). Only the Node server reads it. Without a key or internet, scanning uses OpenCV alone.
 Lighting calibration for vision: `/src/vision/calibrate.html`.

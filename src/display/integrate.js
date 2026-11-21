@@ -10,7 +10,7 @@ import { createScanDebug } from './scanDebug.js';
 import { createDebugHud } from './hud.js';
 import { createReading } from './reading.js';
 
-// Fort detector, cycled with M (or C) on the display, passed to parseFort as { detector }:
+// Fort detector, cycled with C on the display (M is the game's mute), passed to parseFort as { detector }:
 //   auto   - vision runs hybrid and Claude-only in parallel and picks one (OpenCV if both fail)
 //   hybrid - OpenCV shapes + Claude colours;  claude - Claude-only layout;  opencv - colour masks only
 const DETECTORS = ['auto', 'hybrid', 'claude', 'opencv'];
@@ -211,7 +211,7 @@ export function integrate({ net, ui, canvas }) {
   window.addEventListener('keydown', (e) => {
     if ((e.key === 's' || e.key === 'S') && (phase === 'draw' || phase === 'scan' || (phase === 'fling' && !levelLoaded))) useSample();
     if (e.key === 'n' || e.key === 'N') net.send(EVENTS.NEXT, {});
-    if ('mMcC'.includes(e.key) && e.key.length === 1) {
+    if (e.key === 'c' || e.key === 'C') { // C only: M is the game's mute
       detector = DETECTORS[(DETECTORS.indexOf(detector) + 1) % DETECTORS.length];
       store.set('angry-sketches:detector', detector);
       toast(`Fort detector: ${DETECTOR_NAMES[detector]}`);
