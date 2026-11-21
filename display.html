@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Angry Sketches · display</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #e8e1d0; color: #2b2622; font: 16px system-ui, sans-serif; }
+    #code { position: fixed; top: 12px; right: 16px; font-size: 28px; font-weight: 700; letter-spacing: 4px; }
+    #log { position: fixed; left: 12px; bottom: 12px; max-height: 40vh; overflow: auto; font: 12px ui-monospace, monospace; white-space: pre; }
+  </style>
+</head>
+<body>
+  <!-- P0 placeholder: joins a room and logs every event. P2 wires vision + game in here. -->
+  <div id="code"></div>
+  <div id="log"></div>
+  <script type="module">
+    import { connect } from './src/net/socket.js';
+    import { EVENTS, ROLES } from './src/shared/events.js';
+
+    const params = new URLSearchParams(location.search);
+    const room = (params.get('room') || Math.random().toString(36).slice(2, 6)).toUpperCase();
+    if (!params.get('room')) history.replaceState(null, '', `?room=${room}`);
+    document.getElementById('code').textContent = room;
+
+    const logEl = document.getElementById('log');
+    const log = (ev, p) => {
+      const short = p && p.dataUrl ? { ...p, dataUrl: `${p.dataUrl.slice(0, 30)}…` } : p;
+      logEl.textContent = `${new Date().toLocaleTimeString()} ${ev} ${JSON.stringify(short)}\n` + logEl.textContent;
+    };
+
+    const net = connect({ room, role: ROLES.DISPLAY, name: 'display' });
+    for (const ev of Object.values(EVENTS)) net.on(ev, (p) => log(ev, p));
+  </script>
+</body>
+</html>

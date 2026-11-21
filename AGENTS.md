@@ -35,4 +35,8 @@ Fill this in at kickoff so every agent knows whose files are whose.
 
 | Area | Owner (GitHub login) | Folders |
 |---|---|---|
-| | | |
+| Vision (paper photo to Level JSON) | `abdurub10` | `src/vision/`, `public/fixtures/` |
+| Game (physics, rules, art, sound, screens) | `fatgoat032` | `src/game/`, `public/assets/` |
+| Network, controller, integration, contracts | `Ahmeds-abbas` | `server/`, `src/net/`, `src/shared/`, `src/controller/`, `display.html`, `controller.html`, `index.html`, `package.json`, `vite.config.js`, `README.md` |
+
+`src/shared/` holds the contracts (Level JSON, socket events). It is frozen after P0: changes need all three to agree and are committed by `Ahmeds-abbas` with a `CONTRACT:` prefix. Full plan: "Angry Sketches — 3-Agent Build Plan".

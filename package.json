@@ -1,0 +1,26 @@
+{
+  "name": "angry-sketches",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n server,vite -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --watch server/index.js",
+    "dev:client": "vite",
+    "build": "vite build",
+    "start": "vite build && node server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "howler": "^2.2.4",
+    "matter-js": "^0.20.0",
+    "p5": "^1.11.3",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "vite": "^6.0.7"
+  }
+}

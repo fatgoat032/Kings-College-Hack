@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Angry Sketches · controller</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #fbf7ec; color: #2b2622; font: 16px system-ui, sans-serif; }
+    main { padding: 16px; display: grid; gap: 12px; }
+    button { font-size: 20px; padding: 14px; border-radius: 10px; border: 2px solid #2b2622; background: #fff; }
+  </style>
+</head>
+<body>
+  <!-- P0 placeholder: joins the room and sends a test launch. P1 adds the slingshot pad and camera. -->
+  <main>
+    <div>Room: <b id="room"></b> · <span id="status">connecting…</span></div>
+    <button id="test">Test launch</button>
+  </main>
+  <script type="module">
+    import { connect } from './src/net/socket.js';
+    import { EVENTS, ROLES } from './src/shared/events.js';
+
+    const room = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
+    document.getElementById('room').textContent = room || '(none, add ?room=XXXX)';
+    const status = document.getElementById('status');
+
+    const net = connect({ room, role: ROLES.CONTROLLER, name: 'phone' });
+    net.socket.on('connect', () => (status.textContent = 'connected'));
+    net.socket.on('disconnect', () => (status.textContent = 'reconnecting…'));
+    net.on(EVENTS.ROOM_STATE, (s) => (status.textContent = `connected · ${s.players.length} in room`));
+
+    document.getElementById('test').onclick = () =>
+      net.send(EVENTS.LAUNCH, { angle: -Math.PI / 4, power: 0.7, bird: 'red' });
+  </script>
+</body>
+</html>
