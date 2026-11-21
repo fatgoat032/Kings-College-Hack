@@ -184,3 +184,47 @@ export function pickCandidate({ hybrid, claude }) {
   if (cOk) return { chose: 'claude', reason: 'hybrid failed' };
   return { chose: 'opencv', reason: 'both Claude paths failed' };
 }
+
+// ---------------------------------------------------------------------------
+// Team Fix #3: Claude "reading" (/api/read, /api/verify) -> Level. Pixels of the sent page image.
+// ---------------------------------------------------------------------------
+
+/**
+ * reading = { strokes: [{colour,x1,y1,x2,y2,thickness}], polys: [{colour, vertices}], pigs: [{x,y,r}] }
+ * in pixels of a page image of size pageW x pageH (the same page our pageToWorld maps).
+ */
+export function readingToLevel(reading, pageW, pageH, meta) {
+  const map = pageToWorld(pageW, pageH);
+  const blocks = [];
+  for (const s of reading?.strokes || []) {
+    const material = COLOUR_MATERIAL[s.colour];
+    if (!material || ![s.x1, s.y1, s.x2, s.y2, s.thickness].every(Number.isFinite)) continue;
+    const len = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+    const angle = len > 0 ? Math.atan2(s.y2 - s.y1, s.x2 - s.x1) : 0;
+    // keep angles in (-90°, 90°] so a stroke drawn right-to-left isn't upside down
+    const a = angle > Math.PI / 2 ? angle - Math.PI : angle <= -Math.PI / 2 ? angle + Math.PI : angle;
+    const W = Math.max(len * map.scale, MIN_THICK);
+    const H = Math.max(s.thickness * map.scale, MIN_THICK);
+    const cx = (s.x1 + s.x2) / 2;
+    const cy = (s.y1 + s.y2) / 2;
+    blocks.push({
+      id: `b${blocks.length + 1}`, material, shape: 'rect',
+      x: r1(clamp(map.x(cx), 0, WORLD.w)), y: r1(clamp(map.y(cy), 0, WORLD.h)),
+      w: r1(W), h: r1(H), angle: Math.round(a * 1000) / 1000,
+    });
+  }
+  for (const p of reading?.polys || []) {
+    const material = COLOUR_MATERIAL[p.colour];
+    const v = (p.vertices || []).filter((q) => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite));
+    if (!material || v.length < 3) continue;
+    blocks.push({
+      id: `b${blocks.length + 1}`, material, shape: 'poly',
+      vertices: v.slice(0, POLY_MAX_VERTICES).map(([x, y]) => [r1(clamp(map.x(x), 0, WORLD.w)), r1(clamp(map.y(y), 0, WORLD.groundY))]),
+    });
+  }
+  const pigs = (reading?.pigs || []).filter((p) => [p.x, p.y, p.r].every(Number.isFinite)).map((p, i) => {
+    const r = clampPigR(p.r * map.scale);
+    return { id: `p${i + 1}`, x: r1(clamp(map.x(p.x), 0, WORLD.w)), y: r1(clamp(Math.min(map.y(p.y), WORLD.groundY - r), 0, WORLD.h)), r: r1(r) };
+  });
+  return { version: 1, blocks, pigs, meta: { source: 'photo', ...meta } };
+}

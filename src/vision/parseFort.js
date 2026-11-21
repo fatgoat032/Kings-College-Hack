@@ -19,7 +19,7 @@ import { detect } from './pipeline.js';
 import { buildLevel, checkLevel, pageTransform } from './geometry.js';
 import { loadSettings } from './settings.js';
 import { findShapesByColour } from './findShapes.js';
-import { decideShapes, shapesToLevel, layoutToLevel, cleanLayout, classifyStats, pickCandidate } from './hybridLevel.js';
+import { decideShapes, shapesToLevel, layoutToLevel, cleanLayout, classifyStats, pickCandidate, readingToLevel } from './hybridLevel.js';
 import { CLASSIFY_MAX_SHAPES } from '../shared/classify.js';
 
 const MAX_INPUT_W = 1280; // plan: photos arrive at max 1280 px wide
@@ -154,13 +154,36 @@ export async function parseFort(imageSource, options = {}) {
       const res = await postJson('/api/layout', { clean }, signal);
       return { level: cleanLayout(layoutToLevel(res, fs.pageW, fs.pageH, { ...meta, detector: 'claude' })) };
     };
+    // Team Fix #3: Claude reads the page itself (/api/read), we draw its reading over the page,
+    // and Claude checks and corrects it (/api/verify). Own 15 s budget for the two calls.
+    const runVerified = async () => {
+      const pageCanvas = fs.canvases.clean;
+      const W = pageCanvas.width;
+      const H = pageCanvas.height;
+      const image = pageCanvas.toDataURL('image/png');
+      const vSignal = AbortSignal.timeout(15_000);
+      const read = await postJson('/api/read', { image, width: W, height: H, timeoutMs: 7000 }, vSignal);
+      let reading = read.reading;
+      let changes = [];
+      const overlayCanvas = drawReading(pageCanvas, reading);
+      try {
+        const v = await postJson('/api/verify', { image, overlay: overlayCanvas.toDataURL('image/png'), width: W, height: H, reading, timeoutMs: 7000 }, vSignal);
+        if (v.reading) reading = v.reading;
+        changes = v.changes || [];
+      } catch (err) {
+        changes = [`verify skipped: ${err?.message || err}`];
+      }
+      const level = cleanLayout(readingToLevel(reading, W, H, { ...meta, detector: 'claude', reading: 'verified' }));
+      return { level, changes, verifiedOverlay: drawReading(pageCanvas, reading) };
+    };
     const timed = async (name, fn) => {
       const t = performance.now();
       try {
         const r = await fn();
         const check = checkLevel(r.level);
         if (!check.ok) throw new Error(check.message);
-        candidates[name] = { ok: true, ...r, ms: Math.round(performance.now() - t), overlay: fs.canvases.annotated };
+        const { verifiedOverlay, ...rest } = r;
+        candidates[name] = { ok: true, ...rest, ms: Math.round(performance.now() - t), overlay: verifiedOverlay ?? fs.canvases.annotated };
       } catch (err) {
         candidates[name] = { ok: false, error: err?.message || String(err), ms: Math.round(performance.now() - t) };
       }
@@ -168,11 +191,13 @@ export async function parseFort(imageSource, options = {}) {
     const jobs = [];
     if (mode === 'auto' || mode === 'hybrid') jobs.push(timed('hybrid', runHybrid));
     if (mode === 'auto' || mode === 'claude') jobs.push(timed('claude', runClaude));
+    if (mode === 'auto' || mode === 'claude-verified') jobs.push(timed('verified', runVerified));
     await Promise.allSettled(jobs);
 
-    if (mode === 'auto') pick = pickCandidate(candidates);
-    else if (candidates[mode]?.ok) pick = { chose: mode, reason: `${mode} requested` };
-    else pick = { chose: 'opencv', reason: `${mode} requested but failed: ${candidates[mode]?.error}` };
+    const key = mode === 'claude-verified' ? 'verified' : mode;
+    if (mode === 'auto') pick = pickVerified(candidates) ?? pickCandidate(candidates);
+    else if (candidates[key]?.ok) pick = { chose: mode, reason: `${mode} requested` };
+    else pick = { chose: 'opencv', reason: `${mode} requested but failed: ${candidates[key]?.error}` };
   }
 
   // Build the result around the chosen level
@@ -185,7 +210,7 @@ export async function parseFort(imageSource, options = {}) {
     opencv.level.meta.detector = 'opencv';
     return { ...opencv, candidates, pick, timings: { ...opencv.timings, total: performance.now() - t0 } };
   }
-  const chosen = candidates[pick.chose];
+  const chosen = candidates[pick.chose === 'claude-verified' ? 'verified' : pick.chose];
   const fs = claudeBase;
   const copy = (c) => {
     const d = document.createElement('canvas');
@@ -205,6 +230,59 @@ export async function parseFort(imageSource, options = {}) {
     pick,
     timings: { claude: chosen.ms, total: performance.now() - t0 },
   };
+}
+
+/**
+ * Prefer Claude's verified reading when it worked and its block count is within ±50% of the
+ * best other candidate (claude-only, then hybrid, then opencv): a sanity check against a bad read.
+ * Returns null to fall back to the hybrid/claude/opencv rule.
+ */
+function pickVerified(c) {
+  const v = c.verified;
+  if (!v?.ok) return null;
+  const ref = [c.claude, c.hybrid, c.opencv].find((x) => x?.ok);
+  const vn = v.level.blocks.length;
+  if (!ref) return { chose: 'claude-verified', reason: 'only Claude-verified worked' };
+  const rn = ref.level.blocks.length;
+  if (Math.abs(vn - rn) <= 0.5 * Math.max(rn, 1)) {
+    return { chose: 'claude-verified', reason: `Claude read + verified (${vn} blocks vs ${rn}${v.changes?.length ? `, ${v.changes.length} corrections` : ''})` };
+  }
+  return null;
+}
+
+/** Draw a reading (page pixels) over a copy of the page, for /api/verify and the D overlay. */
+function drawReading(pageCanvas, reading) {
+  const c = document.createElement('canvas');
+  c.width = pageCanvas.width;
+  c.height = pageCanvas.height;
+  const g = c.getContext('2d');
+  g.drawImage(pageCanvas, 0, 0);
+  const COL = { black: '#ff00c8', blue: '#00b7ff', grey: '#ff8c00', red: '#ffe600' };
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  for (const s of reading?.strokes || []) {
+    g.strokeStyle = COL[s.colour] || '#ff00c8';
+    g.globalAlpha = 0.35;
+    g.lineWidth = Math.max(2, s.thickness || 4);
+    g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
+    g.globalAlpha = 1;
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
+  }
+  for (const p of reading?.polys || []) {
+    if (!p.vertices?.length) continue;
+    g.strokeStyle = COL[p.colour] || '#ff00c8';
+    g.lineWidth = 3;
+    g.beginPath();
+    p.vertices.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.closePath(); g.stroke();
+  }
+  g.strokeStyle = '#00d24a';
+  g.lineWidth = 3;
+  for (const p of reading?.pigs || []) {
+    g.beginPath(); g.arc(p.x, p.y, p.r, 0, Math.PI * 2); g.stroke();
+  }
+  return c;
 }
 
 let statusCache = null; // { enabled, at }
