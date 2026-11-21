@@ -155,19 +155,20 @@ export async function parseFort(imageSource, options = {}) {
       return { level: cleanLayout(layoutToLevel(res, fs.pageW, fs.pageH, { ...meta, detector: 'claude' })) };
     };
     // Team Fix #3: Claude reads the page itself (/api/read), we draw its reading over the page,
-    // and Claude checks and corrects it (/api/verify). Own 15 s budget for the two calls.
+    // and Claude checks and corrects it (/api/verify). Budget: read ~10 s + verify ~5 s
+    // (the server runs effort high with 2 few-shot images), plus 1 s for the uploads.
     const runVerified = async () => {
       const pageCanvas = fs.canvases.clean;
       const W = pageCanvas.width;
       const H = pageCanvas.height;
       const image = pageCanvas.toDataURL('image/png');
-      const vSignal = AbortSignal.timeout(15_000);
-      const read = await postJson('/api/read', { image, width: W, height: H, timeoutMs: 7000 }, vSignal);
+      const vSignal = AbortSignal.timeout(16_000);
+      const read = await postJson('/api/read', { image, width: W, height: H, timeoutMs: 10_000 }, vSignal);
       let reading = read.reading;
       let changes = [];
       const overlayCanvas = drawReading(pageCanvas, reading);
       try {
-        const v = await postJson('/api/verify', { image, overlay: overlayCanvas.toDataURL('image/png'), width: W, height: H, reading, timeoutMs: 7000 }, vSignal);
+        const v = await postJson('/api/verify', { image, overlay: overlayCanvas.toDataURL('image/png'), width: W, height: H, reading, timeoutMs: 5000 }, vSignal);
         if (v.reading) reading = v.reading;
         changes = v.changes || [];
       } catch (err) {
