@@ -54,7 +54,7 @@ window.addEventListener('keydown', (e) => {
 
 // ---------- UI ----------
 const ui = {
-  card(title, text, buttons = []) {
+  card(title, text, buttons = [], image = null) {
     $('card').hidden = false;
     $('cardTitle').textContent = title;
     $('cardText').textContent = text;
@@ -67,9 +67,15 @@ const ui = {
         return b;
       }),
     );
+    const pic = $('cardImage');
+    pic.replaceChildren();
+    if (image) pic.append(image);
+    pic.hidden = !image;
+    $('mini').hidden = state?.phase === 'lobby';
   },
   hideCard() {
     $('card').hidden = true;
+    $('mini').hidden = true;
   },
   phaseText(t) {
     $('phaseText').textContent = t;

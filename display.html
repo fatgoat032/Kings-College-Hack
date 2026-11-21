@@ -10,12 +10,14 @@
   <canvas id="game"></canvas>
 
   <!-- top bar: phase, scores, small join code -->
+  <!-- one centred pill so it never covers the game's own score (top-left) and pigs-left (top-right) -->
   <header id="hud" hidden>
-    <div class="team A"><b>Team A</b> <span id="scoreA">0</span></div>
-    <div id="phaseText"></div>
-    <div class="team B"><span id="scoreB">0</span> <b>Team B</b></div>
-    <div id="mini"><canvas id="miniQr"></canvas><span id="miniCode"></span></div>
+    <span class="A">A <b id="scoreA">0</b></span>
+    <span id="phaseText"></span>
+    <span class="B"><b id="scoreB">0</b> B</span>
   </header>
+  <!-- small join QR for late joiners, only while a card is up (never over the game) -->
+  <div id="mini" hidden><canvas id="miniQr"></canvas><span id="miniCode"></span></div>
 
   <!-- lobby: big code + QR -->
   <section id="lobby" class="overlay" hidden>
@@ -40,6 +42,7 @@
   <section id="card" class="overlay card" hidden>
     <h2 id="cardTitle"></h2>
     <p id="cardText"></p>
+    <div id="cardImage" hidden></div>
     <div id="cardButtons"></div>
   </section>
 

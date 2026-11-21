@@ -80,10 +80,12 @@ export function integrate({ net, ui, canvas }) {
     startLevel(level);
   }
 
-  function showFortError(message) {
-    ui.card('Fort not ready', `${message}. Scan again from a phone, or use a sample fort.`, [
+  /** debugCanvas (from vision) shows the drawers what was detected. */
+  function showFortError(message, debugCanvas) {
+    const msg = String(message).replace(/[.\s]+$/, '');
+    ui.card('Fort not ready', `${msg}. Scan again from a phone, or use a sample fort.`, [
       { label: 'Use sample fort', onClick: useSample },
-    ]);
+    ], debugCanvas);
   }
 
   net.on(EVENTS.FORT_IMAGE, async ({ dataUrl } = {}) => {
@@ -98,7 +100,7 @@ export function integrate({ net, ui, canvas }) {
       await startLevel(level);
     } catch (err) {
       if (id !== parsing) return;
-      showFortError(err?.message || String(err));
+      showFortError(err?.message || String(err), err?.debugCanvas);
     }
   });
 
