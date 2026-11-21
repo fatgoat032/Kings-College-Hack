@@ -1,39 +1,75 @@
 // Vision: paper photo -> Level JSON.  Owner: abdurub10.
 //
 // HANDOFF CONTRACT (plan, P2):
-//   parseFort(imageSource) -> Promise<{ level, debugCanvas }>
-//   ready() -> Promise that resolves when the vision engine (OpenCV.js) is loaded
+//   parseFort(imageSource, options?) -> Promise<{ level, debugCanvas }>
+//   ready() -> Promise that resolves when OpenCV.js is loaded
 //
-// imageSource can be an <img>, <canvas>, ImageBitmap or a data URL string
+// imageSource: an <img>, <canvas>, ImageBitmap, Blob/File, or a data URL string
 // (what arrives in the fort:image socket event).
 //
-// On failure parseFort REJECTS with an Error whose .message is safe to show on
-// the big screen, e.g. "Draw at least one green pig". The error has
-// .code = 'VISION_ERROR' so display.html can tell it apart from a crash.
+// On a bad drawing parseFort REJECTS with an Error whose .message is safe to
+// show on the big screen (e.g. "Draw at least one green pig") and
+// .code === 'VISION_ERROR', so display.html can tell it apart from a crash.
 //
-// P0 STUB: always returns sample level 1 so display.html and the game can be
-// wired up now. The real OpenCV pipeline replaces the body in P1.
+// options.settings: override settings (the calibration screen uses this);
+// default = loadSettings() (defaults + whatever calibration saved).
 
-import { sampleLevels, validateLevel } from '../shared/level.js';
+import { loadCv } from './opencv.js';
+import { detect } from './pipeline.js';
+import { buildLevel, checkLevel } from './geometry.js';
+import { loadSettings } from './settings.js';
 
-/** Resolves when parseFort is ready to use. The stub is ready immediately. */
+const MAX_INPUT_W = 1280; // plan: photos arrive at max 1280 px wide
+
+/** Resolves when parseFort is ready to use (OpenCV.js loaded, ~1-2 s the first time). */
 export function ready() {
-  return Promise.resolve();
+  return loadCv().then(() => undefined);
 }
 
 /**
- * @param {HTMLImageElement|HTMLCanvasElement|ImageBitmap|string} imageSource
- * @returns {Promise<{ level: object, debugCanvas: HTMLCanvasElement|null }>}
+ * @returns {Promise<{ level: object, debugCanvas: HTMLCanvasElement, warnings: string[], timings: object }>}
  */
-export async function parseFort(imageSource) {
-  await ready();
-  const level = structuredClone(sampleLevels[0]);
-  level.meta = { ...level.meta, source: 'stub' };
+export async function parseFort(imageSource, options = {}) {
+  const t0 = performance.now();
+  const cv = await loadCv();
+  const settings = options.settings ?? loadSettings();
 
-  const { ok, errors } = validateLevel(level);
-  if (!ok) throw visionError(`Stub level is invalid: ${errors.join('; ')}`);
+  const imageData = await toImageData(imageSource);
+  const t1 = performance.now();
 
-  return { level, debugCanvas: stubDebugCanvas(imageSource) };
+  let found;
+  try {
+    found = detect(cv, imageData, settings);
+  } catch (err) {
+    throw visionError(`Couldn't read the drawing (${err?.message || err}). Try another photo.`);
+  }
+  const t2 = performance.now();
+
+  const debugCanvas = document.createElement('canvas');
+  try {
+    cv.imshow(debugCanvas, found.debug.page);
+  } finally {
+    found.debug.page.delete();
+    for (const m of Object.values(found.debug.masks)) m.delete();
+  }
+
+  const { level, warnings } = buildLevel(found, settings, {
+    imageW: imageData.width,
+    imageH: imageData.height,
+    paperFound: found.paperFound,
+  });
+  if (!found.paperFound) warnings.push('Paper edges not found: used the whole photo');
+
+  const check = checkLevel(level);
+  if (!check.ok) {
+    const err = check.bug ? new Error(check.message) : visionError(check.message);
+    err.debugCanvas = debugCanvas;
+    err.level = level;
+    throw err;
+  }
+
+  const timings = { decode: t1 - t0, detect: t2 - t1, total: performance.now() - t0 };
+  return { level, debugCanvas, warnings, timings };
 }
 
 /** An Error the display can show to players as-is. */
@@ -43,16 +79,33 @@ export function visionError(message) {
   return err;
 }
 
-function stubDebugCanvas() {
-  if (typeof document === 'undefined') return null;
+/** Any supported image source -> RGBA ImageData, scaled to at most 1280 px wide. */
+async function toImageData(source) {
+  let drawable = source;
+  if (typeof source === 'string') drawable = await loadImage(source);
+  else if (typeof Blob !== 'undefined' && source instanceof Blob) drawable = await createImageBitmap(source);
+  if (drawable instanceof HTMLImageElement && !drawable.complete) await drawable.decode();
+
+  const w0 = drawable.naturalWidth || drawable.videoWidth || drawable.width;
+  const h0 = drawable.naturalHeight || drawable.videoHeight || drawable.height;
+  if (!w0 || !h0) throw visionError('No image received. Try scanning again.');
+  const s = Math.min(1, MAX_INPUT_W / w0);
+  const w = Math.round(w0 * s);
+  const h = Math.round(h0 * s);
+
   const c = document.createElement('canvas');
-  c.width = 320;
-  c.height = 180;
-  const g = c.getContext('2d');
-  g.fillStyle = '#fff';
-  g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = '#c00';
-  g.font = 'bold 18px system-ui, sans-serif';
-  g.fillText('VISION STUB: sample level 1', 16, 96);
-  return c;
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(drawable, 0, 0, w, h);
+  return g.getImageData(0, 0, w, h);
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(visionError('That photo could not be opened. Try scanning again.'));
+    img.src = src;
+  });
 }
