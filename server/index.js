@@ -54,7 +54,9 @@ io.on('connection', (socket) => {
       } else if (f.type === 'state') broadcastState();
       else if (f.type === 'result') {
         log(room.code, 'result', f);
-        io.to(room.code).emit(EVENTS.RESULT, { winner: f.winner, scores: f.scores, roundDone: f.roundDone });
+        io.to(room.code).emit(EVENTS.RESULT, {
+          winner: f.winner, scores: f.scores, roundDone: f.roundDone, blobs: f.blobs, birds: f.birds, turn: f.turn,
+        });
       }
     }
   }

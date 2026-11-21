@@ -1,3 +1,4 @@
+@font-face { font-family: 'Permanent Marker'; src: url('/assets/fonts/PermanentMarker-Regular.ttf') format('truetype'); font-display: block; }
 :root { --ink: #2b2622; --paper: #fbf7ec; --bg: #e8e1d0; --a: #d8322b; --b: #2f6fd6; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font: 20px system-ui, sans-serif; }
@@ -30,3 +31,18 @@ button:disabled { opacity: 0.4; cursor: default; }
 #cardImage[hidden] { display: none; }
 #cardImage canvas { max-width: 60vw; max-height: 40vh; border: 2px solid var(--ink); border-radius: 8px; }
 #log { position: fixed; left: 8px; bottom: 8px; max-height: 40vh; max-width: 50vw; overflow: auto; margin: 0; padding: 8px; font: 12px ui-monospace, monospace; background: rgba(255, 255, 255, 0.9); }
+
+/* sketch style: marker font everywhere on the big screen, sized to read from 2 m */
+h1, h2, #code, #hud, .card p, .join p, .rosters, button { font-family: 'Permanent Marker', system-ui, sans-serif; }
+h1 { font-size: 96px; font-weight: 400; transform: rotate(-1.5deg); }
+#code { font-weight: 400; }
+.join p { font-size: 28px; }
+#joinUrl { font: 700 24px ui-monospace, monospace; }
+.rosters { font-size: 30px; }
+.rosters ul::before { font-weight: 400; font-size: 34px; }
+#hud { font-size: 30px; font-weight: 400; border-width: 3px; transform: translateX(-50%) rotate(-0.6deg); }
+.card { padding: 40px 56px; border-width: 5px; border-radius: 22px 30px 18px 26px; box-shadow: 6px 8px 0 rgba(43, 38, 34, 0.25); transform: translate(-50%, -50%) rotate(-0.8deg); }
+.card h2 { font-size: 72px; font-weight: 400; line-height: 1.05; }
+.card p { font-size: 34px; line-height: 1.3; }
+button { font-weight: 400; font-size: 36px; padding: 14px 34px; border-width: 4px; border-radius: 16px 22px 14px 20px; box-shadow: 4px 5px 0 var(--ink); }
+button:active { transform: translate(3px, 4px); box-shadow: 1px 1px 0 var(--ink); }

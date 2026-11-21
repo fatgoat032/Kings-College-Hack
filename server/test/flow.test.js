@@ -67,7 +67,7 @@ const a2 = mk('controller', 'Ann', 'c-ann'); await wait(300);
 check(a2.state.teams.A.includes('c-ann') && a2.state.teams.A.length === 1, 'reconnect keeps team, no duplicate');
 a2.emit('launch', { angle: -0.4, power: 0.8, bird: 'red' }); await wait(100);
 d.emit('shot:done', { pigsLeft: 0, birdsUsed: 2, score: 16000 }); await wait(150);
-check(d.state.phase === 'result' && d.state.scores.A === 16000, 'all pigs dead -> result, A scored 16000');
+check(d.state.phase === 'result' && d.state.blobs.A === 2 && d.state.birds.A === 2, 'all pigs dead -> result, A knocked out 2 blobs with 2 birds');
 check(d.got.some(([e, p]) => e === 'result' && p.winner === null && !p.roundDone), 'result after first attack: no winner yet');
 
 b.emit('next'); await wait(150);
@@ -77,10 +77,26 @@ for (let i = 1; i <= 3; i++) {
   b.emit('launch', { angle: -0.5, power: 0.7, bird: 'red' }); await wait(80);
   d.emit('shot:done', { pigsLeft: 2, birdsUsed: i, score: 1000 * i }); await wait(80);
 }
-check(d.state.phase === 'result' && d.state.scores.B === 3000, 'out of birds -> result, B scored 3000');
+check(d.state.phase === 'result' && d.state.blobs.B === 0 && d.state.birds.B === 3, 'out of birds -> result, B 0 blobs, 3 birds');
 check(d.got.some(([e, p]) => e === 'result' && p.roundDone && p.winner === 'A'), 'round done, A wins');
 a2.emit('next'); await wait(150);
 check(d.state.turn.round === 2 && d.state.turn.attacker === 'A', 'round 2, A attacks again');
 
+// tie-break, straight on the room logic: equal blobs, fewer birds wins
+{
+  const { createRoom } = await import('../room.js');
+  const r = createRoom('TIEB');
+  r.join('disp', { role: 'display', name: 'd' });
+  r.join('pa', { role: 'controller', name: 'a' });
+  r.join('pb', { role: 'controller', name: 'b' });
+  r.next('pa'); r.levelReady('disp', { pigs: 2 });
+  r.launch('pa'); r.shotDone('disp', { pigsLeft: 1, birdsUsed: 1 });
+  r.launch('pa'); r.shotDone('disp', { pigsLeft: 1, birdsUsed: 2 });
+  r.launch('pa'); r.shotDone('disp', { pigsLeft: 1, birdsUsed: 3 }); // A: 1 blob, 3 birds
+  r.next('pb'); r.levelReady('disp', { pigs: 1 });
+  r.launch('pb'); const fx = r.shotDone('disp', { pigsLeft: 0, birdsUsed: 1 }); // B: 1 blob, 1 bird
+  const res = fx.find((e) => e.type === 'result');
+  check(res?.roundDone && res.winner === 'B' && res.blobs.A === 1 && res.blobs.B === 1, 'tie on blobs -> fewer birds (B) wins');
+}
 console.log(fails ? `${fails} FAILED` : 'all passed');
 finish(fails ? 1 : 0);

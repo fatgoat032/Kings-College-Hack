@@ -10,7 +10,10 @@ export function createRoom(code) {
   const room = {
     code,
     phase: 'lobby',
-    scores: { A: 0, B: 0 },
+    scores: { A: 0, B: 0 }, // = blobs knocked out (kept for older clients)
+    blobs: { A: 0, B: 0 },
+    birds: { A: 0, B: 0 },
+    pigsAtStart: null,
     round: 1,
     attacker: 'A',
     birdsUsed: 0,
@@ -49,6 +52,8 @@ export function createRoom(code) {
         inFlight: room.inFlight,
       },
       scores: { ...room.scores },
+      blobs: { ...room.blobs },
+      birds: { ...room.birds },
     };
   }
 
@@ -129,8 +134,8 @@ export function createRoom(code) {
     if (!p || p.role !== ROLES.DISPLAY) return [];
     // fling too: a reloaded display re-sends its fort and the attack restarts
     if (!['draw', 'scan', 'fling'].includes(room.phase)) return [];
-    if (room.phase === 'fling') room.attackScore = 0;
-    room.pigsLeft = Number.isFinite(pigs) ? pigs : null;
+    room.pigsAtStart = Number.isFinite(pigs) ? pigs : null;
+    room.pigsLeft = room.pigsAtStart;
     room.birdsUsed = 0;
     room.inFlight = false;
     setPhase('fling');
@@ -154,27 +159,39 @@ export function createRoom(code) {
     return actsFor(players.get(pid), room.attacker) ? [{ type: 'relay' }] : [];
   }
 
-  function shotDone(pid, { pigsLeft, birdsUsed, score } = {}) {
+  function shotDone(pid, { pigsLeft, birdsUsed } = {}) {
     const p = players.get(pid);
     if (!p || p.role !== ROLES.DISPLAY || room.phase !== 'fling') return [];
     room.inFlight = false;
     room.birdsUsed = Number.isFinite(birdsUsed) ? birdsUsed : room.birdsUsed + 1;
     room.pigsLeft = Number.isFinite(pigsLeft) ? pigsLeft : room.pigsLeft;
-    // the game reports its running total for this attack; keep the best we've seen
-    if (Number.isFinite(score)) room.attackScore = Math.max(room.attackScore || 0, score);
     if (room.pigsLeft === 0 || room.birdsUsed >= BIRDS_PER_TURN) return endAttack();
     return [{ type: 'state' }];
   }
 
+  // Scoring: blobs (pigs) knocked out, counted by the server from level:ready pigs
+  // minus pigsLeft. Winner = more blobs; tie = fewer birds used; else a draw.
   function endAttack() {
-    room.scores[room.attacker] += room.attackScore || 0;
-    room.attackScore = 0;
+    const t = room.attacker;
+    const blobs = Number.isFinite(room.pigsAtStart) && Number.isFinite(room.pigsLeft)
+      ? Math.max(0, room.pigsAtStart - room.pigsLeft) : 0;
+    room.blobs[t] += blobs;
+    room.birds[t] += room.birdsUsed;
+    room.scores[t] = room.blobs[t];
     room.attacksThisRound += 1;
     setPhase('result');
-    const { A, B } = room.scores;
     const roundDone = room.attacksThisRound >= 2;
-    const winner = roundDone ? (A === B ? null : A > B ? 'A' : 'B') : null;
-    return [{ type: 'phase' }, { type: 'result', winner, scores: { ...room.scores }, roundDone }];
+    let winner = null;
+    if (roundDone) {
+      const { A, B } = room.blobs;
+      if (A !== B) winner = A > B ? 'A' : 'B';
+      else if (room.birds.A !== room.birds.B) winner = room.birds.A < room.birds.B ? 'A' : 'B';
+    }
+    const turn = { team: t, blobs, birds: room.birdsUsed };
+    return [{ type: 'phase' }, {
+      type: 'result', winner, roundDone, turn,
+      scores: { ...room.scores }, blobs: { ...room.blobs }, birds: { ...room.birds },
+    }];
   }
 
   return { code, players, state, join, leave, next, fortImage, levelReady, aim, launch, ability, shotDone };

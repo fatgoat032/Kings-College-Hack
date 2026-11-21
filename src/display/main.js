@@ -90,8 +90,6 @@ net.on(EVENTS.ROOM_STATE, (s) => {
   const prevPhase = state?.phase;
   state = s;
   renderLobby();
-  $('scoreA').textContent = s.scores.A.toLocaleString();
-  $('scoreB').textContent = s.scores.B.toLocaleString();
   if (s.phase !== prevPhase) renderPhase();
 });
 

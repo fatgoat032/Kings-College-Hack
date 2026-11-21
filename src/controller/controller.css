@@ -1,3 +1,4 @@
+@font-face { font-family: 'Permanent Marker'; src: url('/assets/fonts/PermanentMarker-Regular.ttf') format('truetype'); font-display: swap; }
 :root { --ink: #2b2622; --paper: #fbf7ec; --a: #d8322b; --b: #2f6fd6; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink); font: 18px system-ui, sans-serif; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
@@ -23,3 +24,7 @@ input { font-size: 22px; padding: 12px; border: 2px solid var(--ink); border-rad
 #fling { padding: 0; }
 #flingHint { padding: 10px 16px 0; text-align: center; font-weight: 600; }
 #pad { flex: 1; width: 100%; min-height: 0; display: block; }
+
+h1, .big, .button, #scores, #flingHint { font-family: 'Permanent Marker', system-ui, sans-serif; font-weight: 400; }
+h1 { font-size: 34px; }
+.big, .button { font-size: 24px; box-shadow: 3px 4px 0 var(--ink); }
