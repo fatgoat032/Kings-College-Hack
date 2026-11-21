@@ -15,7 +15,7 @@ export const EVENTS = Object.freeze({
   FORT_IMAGE: 'fort:image',
   /** display -> server: { blocks: n, pigs: n } */
   LEVEL_READY: 'level:ready',
-  /** controller -> server -> display: { angle, power, source? }, at most 20 per second while gripping.
+  /** controller -> server -> display: { angle, power, source? }, at most AIM_RATE (30) per second while gripping.
    *  This is the "grip:move" stream. source: "webcam" | "tilt" | "drag" (where power came from). */
   AIM: 'aim',
   /** controller -> server -> display: { held: true } on grip start, { held: false, cancel? } on release.
@@ -45,8 +45,8 @@ export const TEAMS = Object.freeze(['A', 'B']);
 /** Birds per attacking turn. */
 export const BIRDS_PER_TURN = 3;
 
-/** Max aim messages per second from a controller. */
-export const AIM_RATE = 20;
+/** Max aim ("grip:move") messages per second from a controller. */
+export const AIM_RATE = 30;
 
 /** Max width of a fort:image JPEG, in pixels. */
 export const FORT_IMAGE_MAX_W = 1280;
