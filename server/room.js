@@ -126,7 +126,9 @@ export function createRoom(code) {
   function levelReady(pid, { pigs } = {}) {
     const p = players.get(pid);
     if (!p || p.role !== ROLES.DISPLAY) return [];
-    if (room.phase !== 'scan' && room.phase !== 'draw') return [];
+    // fling too: a reloaded display re-sends its fort and the attack restarts
+    if (!['draw', 'scan', 'fling'].includes(room.phase)) return [];
+    if (room.phase === 'fling') room.attackScore = 0;
     room.pigsLeft = Number.isFinite(pigs) ? pigs : null;
     room.birdsUsed = 0;
     room.inFlight = false;
