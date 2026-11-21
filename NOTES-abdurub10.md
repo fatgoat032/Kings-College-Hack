@@ -13,6 +13,8 @@ const { level, debugCanvas, page, pageToWorld, warnings } = await parseFort(data
 // page = the clean flattened drawing (canvas); pageToWorld = { sx, sy, ox, oy }:
 //   worldX = ox + pageX * sx, worldY = oy + pageY * sy  (for cropping real pen strokes as textures)
 // Visual check: /fixtures/page-check.html
+// debug.masks.{black,blue,grey,red,green} (canvases, white = counted) + debug.overlay (labelled detections);
+// failed scans carry the same on err.debug (and err.debugCanvas). The display D key shows them.
 ```
 
 - Accepts an `<img>`, `<canvas>`, `ImageBitmap` or a **data URL string** (the `fort:image` payload's `dataUrl`).

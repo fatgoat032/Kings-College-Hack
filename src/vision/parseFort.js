@@ -51,9 +51,17 @@ export async function parseFort(imageSource, options = {}) {
   // The clean flattened page (lighting-corrected, no debug drawings) so the game
   // can crop each block's real pen strokes as its texture.
   const page = document.createElement('canvas');
+  // Per-colour masks as canvases (white = pixels counted as that colour), for the
+  // display's D debug overlay: debug.masks.{black,blue,grey,red,green} + debug.overlay.
+  const debug = { overlay: debugCanvas, masks: {} };
   try {
     cv.imshow(debugCanvas, found.debug.page);
     cv.imshow(page, found.debug.flat);
+    for (const [name, m] of Object.entries(found.debug.masks)) {
+      const c = document.createElement('canvas');
+      cv.imshow(c, m);
+      debug.masks[name] = c;
+    }
   } finally {
     found.debug.page.delete();
     found.debug.flat.delete();
@@ -71,6 +79,7 @@ export async function parseFort(imageSource, options = {}) {
   if (!check.ok) {
     const err = check.bug ? new Error(check.message) : visionError(check.message);
     err.debugCanvas = debugCanvas;
+    err.debug = debug;
     err.level = level;
     throw err;
   }
@@ -79,7 +88,7 @@ export async function parseFort(imageSource, options = {}) {
   const pageToWorld = pageTransform(found.pageW, found.pageH);
 
   const timings = { decode: t1 - t0, detect: t2 - t1, total: performance.now() - t0 };
-  return { level, debugCanvas, page, pageToWorld, warnings, timings };
+  return { level, debugCanvas, page, pageToWorld, debug, warnings, timings };
 }
 
 /** An Error the display can show to players as-is. */

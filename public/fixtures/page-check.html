@@ -22,3 +22,19 @@
   g.strokeStyle = '#000'; g.beginPath(); g.moveTo(0, 850); g.lineTo(1600, 850); g.stroke();
   out.textContent = `page ${r.page.width}×${r.page.height} · pageToWorld ${JSON.stringify(r.pageToWorld)} · ${r.level.blocks.length} blocks`;
 </script>
+<h3>debug.masks (white = counted as that colour)</h3>
+<div id="masks" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+<script type="module">
+  import { parseFort } from '/src/vision/index.js';
+  const r = await parseFort('./digital-ipad.svg');
+  const box = document.getElementById('masks');
+  for (const [name, c] of Object.entries(r.debug.masks)) {
+    const f = document.createElement('figure'); f.style.margin = 0;
+    c.style.width = '180px'; c.style.border = '1px solid #ccc';
+    f.append(c, Object.assign(document.createElement('figcaption'), { textContent: name }));
+    box.append(f);
+  }
+  let errOk = false;
+  try { await parseFort('./synthetic-no-pig.svg'); } catch (e) { errOk = !!(e.debug && e.debug.masks.green && e.debug.overlay); }
+  box.insertAdjacentHTML('afterend', `<p id="errcheck">err.debug on failed scan: ${errOk ? 'OK' : 'MISSING'}</p>`);
+</script>
