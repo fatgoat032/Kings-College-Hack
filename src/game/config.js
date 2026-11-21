@@ -1,13 +1,8 @@
 // Every tuning number for the game lives here, so it can be changed in one place.
 // Units are Matter.js units: world units for distance, units per 1/60 s step for speed.
 
-export const WORLD = {
-  w: 1600,
-  h: 900,
-  groundY: 850,
-  sling: { x: 200, y: 700 },
-  fortZone: { x1: 900, x2: 1550 },
-};
+// World size, ground, slingshot and fort zone come from the shared contract.
+export { WORLD } from '../shared/level.js';
 
 // density: Matter density. breakAt: a single impact above this breaks the block.
 // points: score for breaking it.
@@ -39,8 +34,6 @@ export const BIRD = {
 export const PIG = {
   killImpact: 5,
   points: 5000,
-  minR: 14,
-  maxR: 40,
 };
 
 export const TIMING = {

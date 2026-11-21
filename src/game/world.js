@@ -1,27 +1,15 @@
 // Physics and rules. No drawing and no DOM here, so it can be tested in Node.
 import Matter from 'matter-js';
+import { validateLevel, clampPigR } from '../shared/level.js';
 import { WORLD, MATERIALS, TNT, BIRD, PIG, TIMING, SCORE } from './config.js';
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
 
-const MATERIAL_NAMES = Object.keys(MATERIALS);
-
-// Light check of the Level JSON. src/shared/level.js has the real validateLevel();
-// this only guards the game against shapes it can't build.
+// The shared contract check, plus one game rule: a fort needs at least one pig.
 export function checkLevel(level) {
-  const errors = [];
-  if (!level || typeof level !== 'object') return { ok: false, errors: ['level is not an object'] };
-  if (!Array.isArray(level.blocks)) errors.push('blocks must be an array');
-  if (!Array.isArray(level.pigs)) errors.push('pigs must be an array');
-  for (const b of level.blocks || []) {
-    if (!MATERIAL_NAMES.includes(b.material)) errors.push(`block ${b.id}: unknown material ${b.material}`);
-    for (const k of ['x', 'y', 'w', 'h']) if (!Number.isFinite(b[k])) errors.push(`block ${b.id}: ${k} is not a number`);
-    if (b.w <= 0 || b.h <= 0) errors.push(`block ${b.id}: w and h must be positive`);
-  }
-  for (const p of level.pigs || []) {
-    for (const k of ['x', 'y', 'r']) if (!Number.isFinite(p[k])) errors.push(`pig ${p.id}: ${k} is not a number`);
-  }
-  if ((level.pigs || []).length === 0) errors.push('level has no pigs');
+  const result = validateLevel(level);
+  const errors = [...result.errors];
+  if (result.ok && level.pigs.length === 0) errors.push('Draw at least one green pig');
   return { ok: errors.length === 0, errors };
 }
 
@@ -121,7 +109,7 @@ export function createWorld() {
       w.blocks.set(body.id, { body, material: b.material, w: b.w, h: b.h, id: b.id });
     }
     for (const p of level.pigs) {
-      const r = Math.max(PIG.minR, Math.min(PIG.maxR, p.r));
+      const r = clampPigR(p.r);
       const body = Bodies.circle(p.x, p.y, r, { density: 0.001, friction: 0.6, restitution: 0.1, label: 'pig' });
       Composite.add(engine.world, body);
       w.pigs.set(body.id, { body, r, id: p.id });

@@ -20,7 +20,7 @@ Branch: `game`. Owns `src/game/` and `public/assets/`.
 ## Changes from the plan
 - **No fork of yumin-jung/angry-birds and no Angry Birds art.** The repo is public, that fork has no licence, and its art is Rovio's. Everything here is original, which also fits "Angry Sketches".
 - Launch speed is `6 + power × 16`, not `8 + power × 22`: 30 units/step flew off screen.
-- Uses a local `sampleLevels.js` until `src/shared/level.js` lands; then switch the import over.
+- Imports WORLD, validateLevel, clampPigR and sampleLevels from `src/shared/level.js`. A level with zero pigs is rejected with levelError "Draw at least one green pig".
 
 ## Tuning (src/game/config.js)
 | Thing | Value |
