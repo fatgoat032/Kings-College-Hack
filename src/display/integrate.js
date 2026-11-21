@@ -6,6 +6,7 @@
 // before their branches are merged; missing modules fall back to stubs.
 import { EVENTS } from '../shared/events.js';
 import { sampleLevels, validateLevel } from '../shared/level.js';
+import { createScanDebug } from './scanDebug.js';
 
 const gameModules = import.meta.glob('../game/index.js');
 const visionModules = import.meta.glob('../vision/parseFort.js');
@@ -28,15 +29,6 @@ async function loadVision() {
   return mod.parseFort;
 }
 
-function dataUrlToImage(dataUrl) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('could not decode the photo'));
-    img.src = dataUrl;
-  });
-}
-
 export function integrate({ net, ui, canvas }) {
   let phase = 'lobby';
   let game = null;
@@ -44,6 +36,7 @@ export function integrate({ net, ui, canvas }) {
   let sampleIdx = 0;
   let parsing = 0; // id of the newest parse, so a slow old one can't win
   let levelLoaded = false;
+  const scanDebug = createScanDebug(); // D toggles the vision debug overlay
 
   const gameReady = loadGame(canvas)
     .then((g) => {
@@ -97,11 +90,14 @@ export function integrate({ net, ui, canvas }) {
     ui.card('Scanning fort…', 'Turning your drawing into a level', []);
     try {
       await visionReady;
-      const img = await dataUrlToImage(dataUrl);
-      const { level, page, pageToWorld } = await parseFort(img);
+      // the phone's JPEG data URL goes to vision unchanged (no re-encode, no resize)
+      const result = await parseFort(dataUrl);
+      scanDebug.record({ photo: dataUrl, result });
       if (id !== parsing) return;
+      const { level, page, pageToWorld } = result;
       await startLevel(level, { photo: dataUrl, page, pageToWorld });
     } catch (err) {
+      scanDebug.record({ photo: dataUrl, error: err });
       if (id !== parsing) return;
       showFortError(err?.message || String(err), err?.debugCanvas);
     }

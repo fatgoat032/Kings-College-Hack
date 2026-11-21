@@ -4,7 +4,7 @@
 - `npm i && npm run dev` starts Vite on :5173 (LAN) and the socket server on :3000. Vite proxies `/socket.io` and `/api`, so phones only need `http://<laptop-ip>:5173`.
 - Pages: `/display.html` (big screen, makes a room code), `/controller.html?room=XXXX` (phone), `/src/net/fake-display.html?room=XXXX` (logs events, fakes level:ready/shot:done), `/src/game/dev.html` (game alone, once merged).
 - `npm test` runs the end-to-end socket flow test (needs the server running on :3000).
-- Display keys: S = use a sample fort, N = next, L = event log.
+- Display keys: S = use a sample fort, N = next, L = event log, D = vision debug overlay of the last scan (photo, every debug canvas parseFort returns, blocks per material, thicknesses).
 
 ## Motion slingshot (HTTPS)
 Phones only give motion sensors to HTTPS pages, so the tilt-and-swing slingshot needs `npm run dev:https`
