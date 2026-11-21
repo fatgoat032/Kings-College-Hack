@@ -10,7 +10,8 @@
     "build": "vite build",
     "start": "vite build && node server/index.js",
     "test": "node server/test/flow.test.js",
-    "dev:https": "concurrently -k -n server,vite -c blue,green \"npm:dev:server\" \"vite --mode https\""
+    "dev:https": "concurrently -k -n server,vite -c blue,green \"npm:dev:server\" \"vite --mode https\"",
+    "eval:claude": "node server/tools/eval-read.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",
