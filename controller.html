@@ -48,6 +48,12 @@
   <section id="fling" class="screen" hidden>
     <p id="flingHint">Drag back from the centre, let go to fling!</p>
     <canvas id="pad"></canvas>
+    <canvas id="motionPad" hidden></canvas>
+    <div class="row">
+      <button id="motionBtn" class="big" hidden>🎯 Enable motion</button>
+      <button id="modeBtn" class="small" hidden>Use drag instead</button>
+    </div>
+    <div id="flash" hidden></div>
   </section>
 
   <script type="module" src="/src/controller/main.js"></script>
