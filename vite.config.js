@@ -1,9 +1,13 @@
 import { defineConfig } from 'vite';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import { resolve } from 'node:path';
 
 const SERVER_PORT = Number(process.env.SERVER_PORT || 3000);
 
-export default defineConfig({
+// `npm run dev:https` (vite --mode https) serves over HTTPS with a self-signed cert.
+// Phones only expose motion sensors (tilt/swing slingshot) on HTTPS pages.
+export default defineConfig(({ mode }) => ({
+  plugins: mode === 'https' ? [basicSsl({ name: 'angry-sketches' })] : [],
   server: {
     host: true, // listen on the LAN so phones on the hotspot can reach it
     port: 5173,
@@ -22,4 +26,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

@@ -2,6 +2,8 @@
 import { connect } from '../net/socket.js';
 import { EVENTS, ROLES, BIRDS_PER_TURN } from '../shared/events.js';
 import { createPad } from './pad.js';
+import { createMotionPad, motionSupported, needsPermission, requestMotionPermission } from './motion.js';
+import { twang, unlock } from './sfx.js';
 import { fileToJpeg } from './camera.js';
 
 const $ = (id) => document.getElementById(id);
@@ -40,14 +42,74 @@ function start(code, name) {
   let lastResult = null;
   let scanning = false;
 
-  const pad = createPad($('pad'), {
+  // ---- fling input: motion slingshot (tilt + swing) with the drag pad as fallback ----
+  const flash = (text) => {
+    const el = $('flash');
+    el.textContent = text;
+    el.hidden = false;
+    el.classList.remove('go');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('go');
+    clearTimeout(flash.t);
+    flash.t = setTimeout(() => (el.hidden = true), 900);
+  };
+  const callbacks = {
     onAim: (a) => net.send(EVENTS.AIM, a),
     onLaunch: (a) => net.send(EVENTS.LAUNCH, { ...a, bird: 'red' }),
     onTap: () => {
       net.send(EVENTS.ABILITY, {});
       navigator.vibrate?.(30);
+      flash('POWER!');
+    },
+  };
+  const dragPad = createPad($('pad'), {
+    ...callbacks,
+    onLaunch: (a) => {
+      callbacks.onLaunch(a);
+      twang(a.power);
+      flash('LAUNCHED!');
     },
   });
+  const motionPad = createMotionPad($('motionPad'), {
+    ...callbacks,
+    onFeedback: (kind) => {
+      if (kind === 'launched') flash('LAUNCHED!');
+      else if (kind === 'noswing') flash('SWING IT!');
+    },
+  });
+  document.addEventListener('pointerdown', unlock, { once: true });
+
+  // mode: 'motion' when sensors work (HTTPS + permission), else 'drag'. Remembered per phone.
+  let mode = store.get('angry-sketches:mode') || (motionSupported() ? 'motion' : 'drag');
+  if (!motionSupported()) mode = 'drag';
+  let motionGranted = !needsPermission();
+  const setMode = (m) => {
+    mode = m;
+    store.set('angry-sketches:mode', m);
+    render();
+  };
+  $('modeBtn').onclick = () => setMode(mode === 'motion' ? 'drag' : 'motion');
+  $('motionBtn').onclick = async () => {
+    motionGranted = await requestMotionPermission();
+    if (!motionGranted) mode = 'drag';
+    render(motionGranted ? null : 'Motion was not allowed, so drag to aim.');
+  };
+  // sensors never delivered data (e.g. a desktop browser): fall back to drag automatically
+  let sensorMisses = 0;
+  setInterval(() => {
+    const waiting = mode === 'motion' && motionGranted && !$('fling').hidden && !motionPad.isHolding();
+    sensorMisses = waiting && !motionPad.sensorsLive() ? sensorMisses + 1 : 0;
+    if (sensorMisses >= 2) {
+      sensorMisses = 0;
+      mode = 'drag';
+      render('No motion sensors found, so drag to aim.');
+    }
+  }, 1000);
+  const pad = {
+    resize: () => { dragPad.resize(); motionPad.resize(); },
+    setEnabled: (v) => { dragPad.setEnabled(v && mode === 'drag'); motionPad.setEnabled(v && mode === 'motion' && motionGranted); },
+    setFlying: (v) => { dragPad.setFlying(v && mode === 'drag'); motionPad.setFlying(v && mode === 'motion'); },
+  };
 
   net.socket.on('connect', () => ($('status').textContent = 'connected'));
   net.socket.on('disconnect', () => ($('status').textContent = 'reconnecting…'));
@@ -95,7 +157,15 @@ function start(code, name) {
     const show = (screen) => {
       $('msg').hidden = screen !== 'msg';
       $('fling').hidden = screen !== 'fling';
-      if (screen === 'fling') pad.resize();
+      if (screen === 'fling') {
+        const useMotion = mode === 'motion' && motionSupported();
+        $('pad').hidden = useMotion;
+        $('motionPad').hidden = !useMotion;
+        $('motionBtn').hidden = !(useMotion && !motionGranted);
+        $('modeBtn').hidden = !motionSupported();
+        $('modeBtn').textContent = useMotion ? 'Use drag instead' : 'Use motion slingshot';
+        pad.resize();
+      }
     };
     const msg = (title, text, { legend = false, scan = false, upload = false, next = '', scores = false } = {}) => {
       show('msg');
@@ -145,9 +215,12 @@ function start(code, name) {
           show('fling');
           pad.setEnabled(!inFlight);
           pad.setFlying(inFlight);
-          $('flingHint').textContent = inFlight
+          const how = mode === 'motion' && motionSupported()
+            ? (motionGranted ? 'Hold anywhere, tilt to aim, swing and let go!' : 'Tap “Enable motion” first.')
+            : 'Drag back, let go.';
+          $('flingHint').textContent = note || (inFlight
             ? 'Tap for the bird’s power!'
-            : `Your shot! ${left} bird${left === 1 ? '' : 's'} left. Drag back, let go.`;
+            : `Your shot! ${left} bird${left === 1 ? '' : 's'} left. ${how}`);
         } else if (amAttacker) {
           msg('Fling time', inFlight ? 'Bird in the air…' : `${shooterName} is aiming. ${left} left.`);
         } else {

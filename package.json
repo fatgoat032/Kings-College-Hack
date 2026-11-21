@@ -9,7 +9,8 @@
     "dev:client": "vite",
     "build": "vite build",
     "start": "vite build && node server/index.js",
-    "test": "node server/test/flow.test.js"
+    "test": "node server/test/flow.test.js",
+    "dev:https": "concurrently -k -n server,vite -c blue,green \"npm:dev:server\" \"vite --mode https\""
   },
   "dependencies": {
     "express": "^4.21.2",
@@ -21,6 +22,7 @@
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.2.0",
     "concurrently": "^9.1.2",
     "vite": "^6.0.7"
   }

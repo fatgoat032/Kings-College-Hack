@@ -6,6 +6,24 @@
 - `npm test` runs the end-to-end socket flow test (needs the server running on :3000).
 - Display keys: S = use a sample fort, N = next, L = event log.
 
+## Motion slingshot (HTTPS)
+Phones only give motion sensors to HTTPS pages, so the tilt-and-swing slingshot needs `npm run dev:https`
+(Vite with @vitejs/plugin-basic-ssl, a self-signed cert). On plain `npm run dev` (http) phones use the drag pad automatically.
+
+How it plays: hold anywhere on the phone = grab (click + buzz), tilt the phone to aim (upright = flat shot,
+tip the top away from you to aim higher, 0-80°), swing it forward and lift your thumb = launch. Power comes from the
+peak swing acceleration around the release. Lifting without a swing cancels ("SWING IT!"). Tap during flight = ability.
+"Use drag instead" switches modes (remembered per phone). If no sensor data arrives within ~2 s it falls back to drag.
+
+Accepting the self-signed cert (do the laptop first, then each phone, with the same URL the QR shows):
+- **Laptop**: open `https://localhost:5173/display.html` → "Your connection is not private" → Advanced → Proceed.
+- **Android (Chrome)**: scan the QR (https://<laptop-ip>:5173/…) → "Your connection is not private" → Advanced →
+  "Proceed to <ip> (unsafe)". The page then loads; tap "🎯 Enable motion" if it shows.
+- **iPhone/iPad (Safari)**: scan the QR → "This Connection Is Not Private" → Show Details → "visit this website" →
+  Visit Website (passcode may be asked). Then on the fling screen tap "🎯 Enable motion" → Allow.
+  iPhones have no vibration, so the screen flashes LAUNCHED! and a twang plays instead.
+- If the warning won't go away or motion is denied: "Use drag instead" always works, or run plain `npm run dev`.
+
 ## Built
 - P0: Vite multi-page scaffold, `src/shared/level.js`, `src/shared/events.js`.
 - CONTRACT 2: `ability`, `next`, optional `join.pid`, optional `shot:done.score`.
