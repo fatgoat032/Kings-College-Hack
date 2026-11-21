@@ -76,7 +76,9 @@ export function integrate({ net, ui, canvas }) {
   }
 
   function useSample() {
-    const level = structuredClone(sampleLevels[sampleIdx % sampleLevels.length]);
+    // the game ships taller demo forts; fall back to the shared samples
+    const pool = game?.sampleLevels?.length ? game.sampleLevels : sampleLevels;
+    const level = structuredClone(pool[sampleIdx % pool.length]);
     sampleIdx++;
     startLevel(level);
   }
@@ -96,9 +98,9 @@ export function integrate({ net, ui, canvas }) {
     try {
       await visionReady;
       const img = await dataUrlToImage(dataUrl);
-      const { level, page } = await parseFort(img);
+      const { level, page, pageToWorld } = await parseFort(img);
       if (id !== parsing) return;
-      await startLevel(level, { photo: dataUrl, page });
+      await startLevel(level, { photo: dataUrl, page, pageToWorld });
     } catch (err) {
       if (id !== parsing) return;
       showFortError(err?.message || String(err), err?.debugCanvas);
@@ -120,6 +122,7 @@ export function integrate({ net, ui, canvas }) {
       phase = p;
       const { attacker, defender } = state.turn;
       if (p !== 'fling') levelLoaded = false;
+      game?.setTeam?.(p === 'fling' ? attacker : null); // "TEAM A FLINGING" tag
       if (p === 'draw') {
         game?.reset?.();
         ui.card(`Team ${defender}: draw a fort!`, 'Black = wood · blue = ice · grey = stone · red = TNT · green blobs = pigs. On paper, tap “Scan fort” on a phone. On an iPad, draw on a white page, save it, then tap “Upload drawing”.', [
