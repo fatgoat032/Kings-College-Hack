@@ -42,6 +42,9 @@ export function integrate({ net, ui, canvas }) {
     .then((g) => {
       game = g;
       if (!g) return;
+      g.on('phase', ({ phase: gp }) => {
+        if (gp === 'aiming' && pendingLaunch) tryLaunch(pendingLaunch);
+      });
       g.on('shotDone', ({ pigsLeft, birdsUsed, score }) => {
         if (phase === 'fling') net.send(EVENTS.SHOT_DONE, { pigsLeft, birdsUsed, score });
       });
@@ -104,7 +107,26 @@ export function integrate({ net, ui, canvas }) {
   });
 
   net.on(EVENTS.AIM, (a) => phase === 'fling' && game?.aim(a));
-  net.on(EVENTS.LAUNCH, (l) => phase === 'fling' && game?.launch(l));
+  // The game only accepts a launch while it is 'aiming' (not during the settle / "comes alive"
+  // reveal). The server already counts the bird as in flight, so a launch that arrives early is
+  // held and fired as soon as the game is ready; one the game rejects outright is reported back
+  // as a no-op shot:done (birdsUsed unchanged) so the server never waits forever.
+  let pendingLaunch = null;
+  const rejectLaunch = () => {
+    const s = game?.getState?.();
+    if (s) net.send(EVENTS.SHOT_DONE, { pigsLeft: s.pigsLeft, birdsUsed: s.birdsUsed });
+  };
+  function tryLaunch(l) {
+    if (phase !== 'fling' || !game) return;
+    const st = game.getState?.().phase;
+    if (st === 'settling' || st === 'waiting') {
+      pendingLaunch = l;
+      return;
+    }
+    pendingLaunch = null;
+    if (game.launch(l) === false) rejectLaunch();
+  }
+  net.on(EVENTS.LAUNCH, tryLaunch);
   net.on(EVENTS.ABILITY, () => phase === 'fling' && game?.ability?.());
 
   // keyboard shortcuts for the operator: S = sample fort, N = next
@@ -118,6 +140,7 @@ export function integrate({ net, ui, canvas }) {
       phase = p;
       const { attacker, defender } = state.turn;
       if (p !== 'fling') levelLoaded = false;
+      if (p !== 'fling') pendingLaunch = null;
       game?.setTeam?.(p === 'fling' ? attacker : null); // "TEAM A FLINGING" tag
       if (p === 'draw') {
         game?.reset?.();

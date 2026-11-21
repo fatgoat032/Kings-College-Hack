@@ -98,5 +98,17 @@ check(d.state.turn.round === 2 && d.state.turn.attacker === 'A', 'round 2, A att
   const res = fx.find((e) => e.type === 'result');
   check(res?.roundDone && res.winner === 'B' && res.blobs.A === 1 && res.blobs.B === 1, 'tie on blobs -> fewer birds (B) wins');
 }
+// stuck-launch safety net
+{
+  const { createRoom } = await import('../room.js');
+  const r = createRoom('STUK');
+  r.join('disp', { role: 'display', name: 'd' });
+  r.join('pa', { role: 'controller', name: 'a' });
+  r.next('pa'); r.levelReady('disp', { pigs: 2 });
+  r.launch('pa');
+  const early = r.tick(Date.now() + 5000).length;
+  const late = r.tick(Date.now() + 25000).length;
+  check(early === 0 && late === 1 && !r.state().turn.inFlight && r.launch('pa').length > 0, 'a launch with no shot:done is cleared after 20 s and the shooter can fire again');
+}
 console.log(fails ? `${fails} FAILED` : 'all passed');
 finish(fails ? 1 : 0);
