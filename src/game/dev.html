@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Angry Sketches · game dev page</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #e8e1d0; overflow: hidden; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    #help {
+      position: fixed; left: 12px; bottom: 10px; font: 13px system-ui, sans-serif;
+      color: #2b2622; background: rgba(251, 247, 236, 0.85); padding: 6px 10px; border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="help">Drag back from the slingshot and release · arrows aim, space fires · 1/2/3 sample forts · 0 empty · M mute</div>
+  <script type="module">
+    import { createGame } from './index.js';
+    import { sampleLevels } from './sampleLevels.js';
+
+    const game = createGame(document.getElementById('game'));
+    window.game = game;
+    game.on('shotDone', (d) => console.log('shotDone', d));
+    game.on('levelError', (d) => console.warn('levelError', d.errors));
+    game.loadLevel(sampleLevels[0]);
+
+    let muted = false;
+    window.addEventListener('keydown', (e) => {
+      if (e.key >= '1' && e.key <= String(sampleLevels.length)) game.loadLevel(sampleLevels[+e.key - 1]);
+      if (e.key === '0') game.reset();
+      if (e.key === 'm' || e.key === 'M') game.setMuted((muted = !muted));
+    });
+  </script>
+</body>
+</html>
