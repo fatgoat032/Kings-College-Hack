@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Angry Sketches · vision calibration</title>
+  <link rel="stylesheet" href="./calibrate.css" />
+</head>
+<body>
+  <h1>Vision calibration</h1>
+  <p>Use this when the room lighting changes. Load a photo, pick a colour, tap a stroke of it, check the mask, then Save.</p>
+  <div id="cal"></div>
+  <script type="module">
+    import { mountCalibration } from './calibrate.js';
+    mountCalibration(document.getElementById('cal'));
+  </script>
+</body>
+</html>

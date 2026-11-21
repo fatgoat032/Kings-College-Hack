@@ -75,3 +75,18 @@ test('compareLevels matches by material and distance, reports missing/extra', ()
   assert.equal(bad.missing.length, 3);
   assert.equal(bad.extra.length, 1);
 });
+
+import { rgbToHsv, rangeAround } from '../colour.js';
+
+test('rgbToHsv uses OpenCV ranges', () => {
+  assert.deepEqual(rgbToHsv(255, 0, 0), [0, 255, 255]);
+  assert.deepEqual(rgbToHsv(0, 255, 0), [60, 255, 255]);
+  assert.deepEqual(rgbToHsv(0, 0, 255), [120, 255, 255]);
+  assert.deepEqual(rgbToHsv(128, 128, 128), [0, 0, 128]);
+});
+
+test('rangeAround wraps red hue', () => {
+  const r = rangeAround('red', [2, 200, 200]);
+  assert.ok(r.h[0] > r.h[1], 'wraps');
+  assert.deepEqual(rangeAround('black', [0, 10, 30]).h, [0, 180]);
+});

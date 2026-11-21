@@ -30,7 +30,7 @@ const { level, debugCanvas, warnings } = await parseFort(dataUrlOrImageOrCanvas)
 | P1 | 8 real test photos + expected JSON | ⏳ abdurub is drawing them |
 | P2 | Real `parseFort` on branch `vision`, ready for @Ahmeds-abbas to merge | ✅ |
 | P3 | Snap near-flat blocks (within 6°) | ✅ (in geometry.js) |
-| P3 | Calibration screen | ⏳ |
+| P3 | Calibration screen (`/src/vision/calibrate.html`): load photo, tap a stroke to sample a colour, HSV sliders, live mask, saved to localStorage | ✅ |
 | P4 | Bonus: draw-your-own-bird polygon | ⏳ |
 | P5 | Real-photo pass rate in README | ⏳ |
 

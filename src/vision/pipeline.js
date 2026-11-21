@@ -111,6 +111,7 @@ export function detect(cv, imageData, settings) {
     }
 
     // ---- debug view: what we detected, drawn over the flattened page -------------
+    const flat = rgb.clone(); // caller frees: the lighting-corrected page (calibration samples it)
     const debugPage = rgb.clone(); // caller frees
     cv.cvtColor(debugPage, debugPage, cv.COLOR_RGB2RGBA);
     for (const b of blocks) {
@@ -132,7 +133,7 @@ export function detect(cv, imageData, settings) {
       blocks,
       pigs,
       paperFound,
-      debug: { page: debugPage, masks: Object.fromEntries(Object.entries(masks).map(([n, m]) => [n, m.clone()])) },
+      debug: { page: debugPage, flat, masks: Object.fromEntries(Object.entries(masks).map(([n, m]) => [n, m.clone()])) },
     };
   } finally {
     for (const m of mats) {

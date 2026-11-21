@@ -50,6 +50,7 @@ export async function parseFort(imageSource, options = {}) {
     cv.imshow(debugCanvas, found.debug.page);
   } finally {
     found.debug.page.delete();
+    found.debug.flat.delete();
     for (const m of Object.values(found.debug.masks)) m.delete();
   }
 
