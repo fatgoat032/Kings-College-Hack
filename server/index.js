@@ -109,6 +109,16 @@ io.on('connection', (socket) => {
   });
 });
 
+// unstick rooms whose display never answered a launch
+setInterval(() => {
+  for (const room of rooms.values()) {
+    if (room.tick().length) {
+      log(room.code, 'launch timed out, clearing inFlight');
+      io.to(room.code).emit(EVENTS.ROOM_STATE, room.state());
+    }
+  }
+}, 2000);
+
 http.listen(PORT, () => {
   console.log(`socket server on :${PORT}  (LAN: ${lanIps().join(', ') || 'none'})`);
 });

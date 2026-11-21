@@ -151,6 +151,7 @@ export function createRoom(code) {
     if (room.phase !== 'fling' || room.inFlight) return [];
     if (shooter()?.id !== pid) return [];
     room.inFlight = true;
+    room.launchAt = Date.now();
     return [{ type: 'relay' }, { type: 'state' }];
   }
 
@@ -194,5 +195,14 @@ export function createRoom(code) {
     }];
   }
 
-  return { code, players, state, join, leave, next, fortImage, levelReady, aim, launch, ability, shotDone };
+  /** Safety net: a launch with no shot:done for this long is dropped so the turn can't hang. */
+  function tick(now = Date.now(), maxFlightMs = 20000) {
+    if (room.phase === 'fling' && room.inFlight && now - (room.launchAt || 0) > maxFlightMs) {
+      room.inFlight = false;
+      return [{ type: 'state' }];
+    }
+    return [];
+  }
+
+  return { code, players, state, tick, join, leave, next, fortImage, levelReady, aim, launch, ability, shotDone };
 }

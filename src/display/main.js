@@ -109,7 +109,7 @@ function renderLobby() {
 function renderPhase() {
   const { phase, turn } = state;
   $('lobby').hidden = phase !== 'lobby';
-  $('hud').hidden = phase === 'lobby';
+  $('hud').hidden = phase === 'lobby' || phase === 'fling'; // the game draws its own team tag while flinging
   if (phase === 'lobby') return ui.hideCard();
   const names = { draw: 'Draw', scan: 'Scan', fling: 'Fling!', result: 'Result' };
   ui.phaseText(`Round ${turn.round} · Team ${turn.attacker} attacks · ${names[phase]}`);
