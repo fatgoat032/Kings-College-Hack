@@ -41,7 +41,7 @@ a.emit('next'); await wait(150);
 check(d.state.phase === 'draw' && d.state.turn.attacker === 'A', 'next -> draw, A attacks, B draws');
 
 a.emit('fort:image', { dataUrl: 'data:x' }); await wait(150);
-check(!d.got.some(([e]) => e === 'fort:image'), 'attacker cannot send the fort photo');
+check(d.got.some(([e]) => e === 'fort:image'), 'any phone can send the fort photo (shared iPad upload)');
 b.emit('fort:image', { dataUrl: 'data:x' }); await wait(150);
 check(d.got.some(([e]) => e === 'fort:image') && d.state.phase === 'scan', 'defender photo reaches display, phase scan');
 
