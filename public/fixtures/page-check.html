@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>page + pageToWorld check</title>
+<body style="font:14px system-ui;margin:16px">
+<h3>parseFort page + pageToWorld check</h3>
+<pre id="out">running…</pre>
+<canvas id="c" width="1600" height="900" style="width:800px;border:1px solid #ccc"></canvas>
+<script type="module">
+  import { parseFort } from '/src/vision/index.js';
+  const out = document.getElementById('out');
+  const r = await parseFort('./digital-ipad.svg');
+  const { sx, sy, ox, oy } = r.pageToWorld;
+  // draw the clean page into world space, then outline every detected block on top
+  const g = document.getElementById('c').getContext('2d');
+  g.fillStyle = '#eef'; g.fillRect(0, 0, 1600, 900);
+  g.drawImage(r.page, ox, oy, r.page.width * sx, r.page.height * sy);
+  g.strokeStyle = '#f0f'; g.lineWidth = 3;
+  for (const b of r.level.blocks) {
+    g.save(); g.translate(b.x, b.y); g.rotate(b.angle); g.strokeRect(-b.w / 2, -b.h / 2, b.w, b.h); g.restore();
+  }
+  for (const p of r.level.pigs) { g.beginPath(); g.arc(p.x, p.y, p.r, 0, 7); g.stroke(); }
+  g.strokeStyle = '#000'; g.beginPath(); g.moveTo(0, 850); g.lineTo(1600, 850); g.stroke();
+  out.textContent = `page ${r.page.width}×${r.page.height} · pageToWorld ${JSON.stringify(r.pageToWorld)} · ${r.level.blocks.length} blocks`;
+</script>

@@ -8,8 +8,11 @@ Owner of `src/vision/` and `public/fixtures/`. Branch: `vision`.
 import { parseFort, ready } from './src/vision/index.js';
 
 await ready();                                  // loads OpenCV.js (~1-2 s the first time)
-const { level, debugCanvas, warnings } = await parseFort(dataUrlOrImageOrCanvas);
+const { level, debugCanvas, page, pageToWorld, warnings } = await parseFort(dataUrlOrImageOrCanvas);
 // level passes validateLevel(); debugCanvas = flattened page with detections drawn on it
+// page = the clean flattened drawing (canvas); pageToWorld = { sx, sy, ox, oy }:
+//   worldX = ox + pageX * sx, worldY = oy + pageY * sy  (for cropping real pen strokes as textures)
+// Visual check: /fixtures/page-check.html
 ```
 
 - Accepts an `<img>`, `<canvas>`, `ImageBitmap` or a **data URL string** (the `fort:image` payload's `dataUrl`).

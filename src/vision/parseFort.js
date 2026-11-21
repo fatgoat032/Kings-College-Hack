@@ -16,7 +16,7 @@
 
 import { loadCv } from './opencv.js';
 import { detect } from './pipeline.js';
-import { buildLevel, checkLevel } from './geometry.js';
+import { buildLevel, checkLevel, pageTransform } from './geometry.js';
 import { loadSettings } from './settings.js';
 
 const MAX_INPUT_W = 1280; // plan: photos arrive at max 1280 px wide
@@ -27,7 +27,9 @@ export function ready() {
 }
 
 /**
- * @returns {Promise<{ level: object, debugCanvas: HTMLCanvasElement, warnings: string[], timings: object }>}
+ * @returns {Promise<{ level: object, debugCanvas: HTMLCanvasElement, page: HTMLCanvasElement,
+ *   pageToWorld: { sx: number, sy: number, ox: number, oy: number }, warnings: string[], timings: object }>}
+ *   page: the clean flattened drawing; worldX = ox + pageX·sx, worldY = oy + pageY·sy
  */
 export async function parseFort(imageSource, options = {}) {
   const t0 = performance.now();
@@ -46,8 +48,12 @@ export async function parseFort(imageSource, options = {}) {
   const t2 = performance.now();
 
   const debugCanvas = document.createElement('canvas');
+  // The clean flattened page (lighting-corrected, no debug drawings) so the game
+  // can crop each block's real pen strokes as its texture.
+  const page = document.createElement('canvas');
   try {
     cv.imshow(debugCanvas, found.debug.page);
+    cv.imshow(page, found.debug.flat);
   } finally {
     found.debug.page.delete();
     found.debug.flat.delete();
@@ -69,8 +75,11 @@ export async function parseFort(imageSource, options = {}) {
     throw err;
   }
 
+  // worldX = ox + pageX * sx, worldY = oy + pageY * sy (pixels of `page`)
+  const pageToWorld = pageTransform(found.pageW, found.pageH);
+
   const timings = { decode: t1 - t0, detect: t2 - t1, total: performance.now() - t0 };
-  return { level, debugCanvas, warnings, timings };
+  return { level, debugCanvas, page, pageToWorld, warnings, timings };
 }
 
 /** An Error the display can show to players as-is. */

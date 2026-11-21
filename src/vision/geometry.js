@@ -40,6 +40,16 @@ export function pageToWorld(pageW, pageH) {
   };
 }
 
+/**
+ * The same mapping as pageToWorld, as plain numbers for the game:
+ *   worldX = ox + pageX * sx,  worldY = oy + pageY * sy
+ * (page = the flattened page canvas returned by parseFort).
+ */
+export function pageTransform(pageW, pageH) {
+  const m = pageToWorld(pageW, pageH);
+  return { sx: m.scale, sy: m.scale, ox: m.x(0), oy: m.y(0) };
+}
+
 const round1 = (v) => Math.round(v * 10) / 10;
 
 /**
