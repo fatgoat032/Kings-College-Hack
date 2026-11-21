@@ -17,6 +17,13 @@
       const conf = scenario === 'unsure' ? 0.55 : 0.92;
       return json({ shapes: truth.map((t) => ({ ...t, confidence: conf })) });
     }
+    if (u.endsWith('/api/read')) {
+      if (scenario === 'down' || scenario !== 'read') return json({ error: 'no read in this scenario' });
+      return json({ reading, ms: 900, model: 'simulated' });
+    }
+    if (u.endsWith('/api/verify')) {
+      return json({ reading, changes: ['moved TNT 4 px'], ms: 800, model: 'simulated' });
+    }
     if (u.endsWith('/api/layout')) {
       if (scenario === 'down') return json({ error: 'simulated outage' });
       // a plausible Claude layout in page fractions: 2 pillars, beam, TNT, 2 pigs
@@ -36,11 +43,24 @@
   const { loadSettings } = await import('/src/vision/settings.js');
   await ready();
   // what a correct Claude would answer: each numbered shape's true colour
-  const truth = findShapesByColour(await loadCv(), await toImageData('./ipad-marker-pencil.svg'), loadSettings()).shapes
-    .map((s) => ({ n: s.n, colour: s.guess, kind: s.guess === 'green' ? 'pig' : 'block' }));
+  const shapesTruth = findShapesByColour(await loadCv(), await toImageData('./ipad-marker-pencil.svg'), loadSettings()).shapes;
+  const truth = shapesTruth.map((s) => ({ n: s.n, colour: s.guess, kind: s.guess === 'green' ? 'pig' : 'block' }));
+  // a correct Claude reading of the same page (page pixels): one stroke per block along its long axis
+  const reading = {
+    strokes: shapesTruth.filter((s) => s.guess !== 'green').map((s) => {
+      const a = (s.rect.angleDeg * Math.PI) / 180;
+      const long = Math.max(s.rect.w, s.rect.h);
+      const vertical = s.rect.h > s.rect.w;
+      const dx = vertical ? -Math.sin(a) * long / 2 : Math.cos(a) * long / 2;
+      const dy = vertical ? Math.cos(a) * long / 2 : Math.sin(a) * long / 2;
+      return { colour: s.guess, x1: s.rect.cx - dx, y1: s.rect.cy - dy, x2: s.rect.cx + dx, y2: s.rect.cy + dy, thickness: Math.min(s.rect.w, s.rect.h) };
+    }),
+    polys: [],
+    pigs: shapesTruth.filter((s) => s.guess === 'green').map((s) => ({ x: s.circle.cx, y: s.circle.cy, r: s.circle.r })),
+  };
   const out = [];
   // classify keeps our own colour guess when Claude says colour undefined -> use guesses via low conf? no: set colour from guess
-  for (const sc of ['good', 'unsure', 'down', 'nokey']) {
+  for (const sc of ['read', 'good', 'unsure', 'down', 'nokey']) {
     scenario = sc;
     // reset the status cache between scenarios by reloading the module state is not possible; status cached 60 s,
     // so 'nokey' is checked last in a fresh import below.

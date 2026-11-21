@@ -93,6 +93,14 @@ Saving the last scan to `public/fixtures/last-scan/` needs a file write, which t
 - `'hybrid'` / `'claude'` / `'opencv'` force one path (falling back to OpenCV if it fails).
 - Checks: unit tests 18/18; /fixtures/auto-check.html (simulated Claude): good -> hybrid, unsure -> claude, down -> opencv; fixtures 10/10 in auto mode without a key.
 
+## Team Fix #3 (17:50 brief): Claude read + verify
+
+- New candidate in auto-pick: `verified`. Page PNG (flattened paper, page pixels) -> POST /api/read -> we draw the reading over the page -> POST /api/verify -> `readingToLevel` + `cleanLayout`. Own 15 s budget (7 s per call); verify failing keeps the read.
+- Pick: claude-verified if it worked and its block count is within ±50% of the best other candidate (claude-only, then hybrid, then opencv); otherwise the existing hybrid/claude/opencv rule. `parseFort(img, { detector: 'claude-verified' })` forces it.
+- `level.meta.detector` = 'claude' with `meta.reading = 'verified'`, because 'claude-verified' is not in DETECTORS (src/shared, Ahmed's). `pick.chose` = 'claude-verified'. `candidates.verified` has `changes` (Claude's corrections) and `overlay` (the reading drawn on the page).
+- Truth set for few-shot: public/fixtures/truth/{digital-ipad,ipad-marker-pencil}.json + .png (both fewshot: true), made by `node src/vision/tools/make-truth.js`.
+- Checks: unit 19/19; /fixtures/auto-check.html (simulated): read ok -> claude-verified; read down -> hybrid; unsure -> claude; outage -> opencv.
+
 ## Known limits
 
 - A diagonal block touching another block of the same colour can be lost when the blob is split into bars.

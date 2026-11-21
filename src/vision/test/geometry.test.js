@@ -189,3 +189,18 @@ test('auto: classifyStats + pickCandidate follow the brief', () => {
   assert.equal(pickCandidate({ hybrid: { ok: false }, claude: { ok: true, level: L(6) } }).chose, 'claude');
   assert.equal(pickCandidate({ hybrid: { ok: false }, claude: { ok: false } }).chose, 'opencv');
 });
+
+import { readingToLevel } from '../hybridLevel.js';
+
+test('fix3: readingToLevel turns strokes/polys/pigs (page pixels) into a valid level', () => {
+  const lv = readingToLevel({
+    strokes: [{ colour: 'black', x1: 100, y1: 500, x2: 100, y2: 300, thickness: 20 }, { colour: 'blue', x1: 400, y1: 290, x2: 60, y2: 290, thickness: 18 }],
+    polys: [{ colour: 'grey', vertices: [[500, 560], [600, 560], [550, 450]] }],
+    pigs: [{ x: 300, y: 540, r: 25 }],
+  }, 800, 566, { detector: 'claude', reading: 'verified' });
+  assert.deepEqual(validateLevel(lv), { ok: true, errors: [] });
+  assert.equal(lv.blocks.length, 3);
+  assert.ok(Math.abs(Math.abs(lv.blocks[0].angle) - Math.PI / 2) < 1e-3, 'vertical stroke');
+  assert.equal(lv.blocks[1].angle, 0, 'right-to-left stroke stays flat, not flipped');
+  assert.equal(lv.blocks[2].shape, 'poly');
+});
