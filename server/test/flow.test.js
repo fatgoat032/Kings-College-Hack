@@ -1,10 +1,25 @@
-// End-to-end flow test: node server/test/flow.test.js (server must be running on :3000)
+// End-to-end flow test: `npm test`. Starts its own server on a spare port.
 import { io } from 'socket.io-client';
-const URL = process.env.URL || 'http://localhost:3000';
-const ROOM = 'TEST';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const PORT = 3917;
+const server = spawn(process.execPath, [fileURLToPath(new URL('../index.js', import.meta.url))], {
+  env: { ...process.env, SERVER_PORT: String(PORT) },
+  stdio: ['ignore', 'pipe', 'inherit'],
+});
+await new Promise((resolve, reject) => {
+  const t = setTimeout(() => reject(new Error('server did not start')), 10000);
+  server.stdout.on('data', (d) => d.toString().includes('socket server on') && (clearTimeout(t), resolve()));
+  server.on('exit', (c) => reject(new Error(`server exited with ${c}`)));
+});
+const finish = (code) => { server.kill(); process.exit(code); };
+
+const BASE = `http://localhost:${PORT}`;
+const ROOM = 'T' + Array.from({ length: 3 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const mk = (role, name, pid) => {
-  const s = io(URL, { transports: ['websocket'] });
+  const s = io(BASE, { transports: ['websocket'] });
   s.state = null; s.got = [];
   s.on('connect', () => s.emit('join', { room: ROOM, role, name, pid }));
   s.on('room:state', (st) => (s.state = st));
@@ -68,4 +83,4 @@ a2.emit('next'); await wait(150);
 check(d.state.turn.round === 2 && d.state.turn.attacker === 'A', 'round 2, A attacks again');
 
 console.log(fails ? `${fails} FAILED` : 'all passed');
-process.exit(fails ? 1 : 0);
+finish(fails ? 1 : 0);
