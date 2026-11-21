@@ -29,7 +29,8 @@ Branch: `game`. Owns `src/game/` and `public/assets/`.
 | ice | density 0.001, breaks at 4, 300 pts |
 | stone | density 0.005, breaks at 15, 800 pts |
 | tnt | explodes on impact > 2, radius 150, 1000 pts |
-| blob (pig) | dies at impact > 5 or off-world, 5000 pts |
+| blob (pig) | dies at impact > 4 or off-world, 5000 pts |
+| shots | Scrunch (no ability), Dart (speed ×1.9), Puff (grows ×2), Boomer (flies back); order Scrunch, Dart, Puff each turn; bird density 0.005 and ice friction 0.05 from yumin-jung/angry-birds |
 | shots per turn | 3, unused shot bonus 10,000 |
 | launch speed | 6 + power × 16 |
 
@@ -38,3 +39,7 @@ Branch: `game`. Owns `src/game/` and `public/assets/`.
 - Custom bird from abdurub10's polygon.
 - Live Repair (`repair` event).
 - Session leaderboard.
+
+## Mechanics taken from yumin-jung/angry-birds
+Bird types with one-time abilities (none / speed boost / grow ×2 / boomerang), bird density 0.005, ice friction 0.05. Re-implemented in `world.js` (`ability()`); the characters are our own paper designs with our own names, no art from that repo.
+`game.ability()` fires the ability; space does it locally. Wiring a phone "tap" to it needs a socket event, which is a contract change for Ahmeds-abbas.

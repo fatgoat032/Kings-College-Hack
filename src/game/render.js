@@ -209,6 +209,122 @@ export function createRenderer(canvas, world) {
     wobblyLine(ctx, x - r * 0.3, y + r * 0.45, x + r * 0.3, y + r * 0.4, rand, 0.8);
   }
 
+  function drawFace(x, y, r, rand) {
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.6;
+    wobblyLine(ctx, x - r * 0.55, y - r * 0.45, x - r * 0.1, y - r * 0.2, rand, 0.8);
+    wobblyLine(ctx, x + r * 0.55, y - r * 0.45, x + r * 0.1, y - r * 0.2, rand, 0.8);
+    ctx.fillStyle = INK;
+    ctx.beginPath();
+    ctx.arc(x - r * 0.3, y, r * 0.1, 0, Math.PI * 2);
+    ctx.arc(x + r * 0.3, y, r * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Dart: a folded paper aeroplane pointing where it's flying.
+  function drawDart(x, y, r, heading, rand) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(heading);
+    const nose = { x: r * 1.7, y: 0 };
+    const top = { x: -r * 1.1, y: -r * 0.9 };
+    const bot = { x: -r * 1.1, y: r * 0.9 };
+    const fold = { x: -r * 0.7, y: 0 };
+    ctx.fillStyle = '#fffdf6';
+    ctx.beginPath();
+    ctx.moveTo(nose.x, nose.y);
+    ctx.lineTo(top.x, top.y);
+    ctx.lineTo(fold.x, fold.y);
+    ctx.lineTo(bot.x, bot.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(43, 38, 34, 0.12)';
+    ctx.beginPath();
+    ctx.moveTo(nose.x, nose.y);
+    ctx.lineTo(fold.x, fold.y);
+    ctx.lineTo(bot.x, bot.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.4;
+    wobblyLine(ctx, nose.x, nose.y, top.x, top.y, rand, 1);
+    wobblyLine(ctx, top.x, top.y, fold.x, fold.y, rand, 1);
+    wobblyLine(ctx, fold.x, fold.y, bot.x, bot.y, rand, 1);
+    wobblyLine(ctx, bot.x, bot.y, nose.x, nose.y, rand, 1);
+    ctx.lineWidth = 1.6;
+    wobblyLine(ctx, nose.x, nose.y, fold.x, fold.y, rand, 0.6);
+    // one squinting angry eye
+    ctx.lineWidth = 2.6;
+    wobblyLine(ctx, r * 0.15, -r * 0.5, r * 0.65, -r * 0.3, rand, 0.6);
+    ctx.fillStyle = INK;
+    ctx.beginPath();
+    ctx.arc(r * 0.45, -r * 0.12, r * 0.11, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Puff: a brown paper bag that inflates when its ability fires.
+  function drawPuff(x, y, r, rot, rand) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot * 0.5);
+    ctx.fillStyle = '#d8b47a';
+    ctx.beginPath();
+    ctx.ellipse(0, r * 0.05, r * 1.0, r * 0.95, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#5b3f1f';
+    ctx.lineWidth = 2.6;
+    wobblyCircle(ctx, 0, r * 0.05, r, rand, 1.8);
+    // scrunched top
+    ctx.lineWidth = 2.2;
+    for (let i = -2; i <= 2; i++) {
+      wobblyLine(ctx, i * r * 0.22, -r * 0.85, i * r * 0.28, -r * 1.25, rand, 0.8);
+    }
+    wobblyLine(ctx, -r * 0.5, -r * 0.82, r * 0.5, -r * 0.82, rand, 1);
+    ctx.restore();
+    drawFace(x, y, r * 0.9, rand);
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.arc(x, y + r * 0.55, r * 0.18, 0, Math.PI * 2); // "o" mouth, holding its breath
+    ctx.stroke();
+  }
+
+  // Boomer: a folded paper boomerang that spins.
+  function drawBoomer(x, y, r, rot, rand) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.strokeStyle = INK;
+    ctx.fillStyle = '#fffdf6';
+    const arm = (sign) => {
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.2, 0);
+      ctx.lineTo(sign * r * 1.3, -r * 0.9);
+      ctx.lineTo(sign * r * 1.5, -r * 0.45);
+      ctx.lineTo(r * 0.25, r * 0.45);
+      ctx.closePath();
+      ctx.fill();
+    };
+    arm(1);
+    arm(-1);
+    ctx.lineWidth = 2.4;
+    wobblyLine(ctx, -r * 0.2, 0, r * 1.3, -r * 0.9, rand, 1);
+    wobblyLine(ctx, r * 1.3, -r * 0.9, r * 1.5, -r * 0.45, rand, 1);
+    wobblyLine(ctx, r * 1.5, -r * 0.45, r * 0.25, r * 0.45, rand, 1);
+    wobblyLine(ctx, -r * 0.2, 0, -r * 1.3, -r * 0.9, rand, 1);
+    wobblyLine(ctx, -r * 1.3, -r * 0.9, -r * 1.5, -r * 0.45, rand, 1);
+    wobblyLine(ctx, -r * 1.5, -r * 0.45, r * 0.25, r * 0.45, rand, 1);
+    ctx.restore();
+    drawFace(x, y - r * 0.1, r * 0.6, rand);
+  }
+
+  function drawShot(kind, x, y, r, rot, heading, rand) {
+    if (kind === 'dart') drawDart(x, y, r, heading, rand);
+    else if (kind === 'puff') drawPuff(x, y, r, rot, rand);
+    else if (kind === 'boomer') drawBoomer(x, y, r, rot, rand);
+    else drawPaperBall(x, y, r, rot, rand, 7);
+  }
+
   // The targets: smug green doodle blobs.
   function drawBlob(x, y, r, rot, rand) {
     ctx.save();
@@ -384,10 +500,12 @@ export function createRenderer(canvas, world) {
     if (world.level) markerText(`blobs left: ${world.pigs.size}`, WORLD.w - 40, 50, 34, '#2f6b1f', 'right');
 
     // shots remaining, lined up on the ground behind the slingshot
-    const loaded = world.phase === 'aiming' ? 1 : 0;
-    const waiting = Math.max(0, BIRD.perTurn - world.birdsUsed - loaded);
-    for (let i = 0; i < waiting; i++) {
-      drawPaperBall(150 - i * 46, WORLD.groundY - 18, 16, 0, rand, seed + i);
+    const queue = world.shotQueue().slice(world.phase === 'aiming' ? 1 : 0);
+    queue.forEach((kind, i) => {
+      drawShot(kind, 150 - i * 50, WORLD.groundY - 18, 15, 0, 0, rand);
+    });
+    if (world.phase === 'flying' && world.bird && !world.bird.abilityUsed && world.bird.kind !== 'scrunch') {
+      markerText('SPACE for power!', WORLD.w / 2, 120, 34, '#e2483d', 'center');
     }
   }
 
@@ -437,7 +555,11 @@ export function createRenderer(canvas, world) {
         k: p.body.id, r: p.r, x: p.body.position.x, y: p.body.position.y, angle: p.body.angle,
       })),
       bird: world.bird
-        ? { x: world.bird.body.position.x, y: world.bird.body.position.y, angle: world.bird.body.angle }
+        ? {
+          x: world.bird.body.position.x, y: world.bird.body.position.y, angle: world.bird.body.angle,
+          kind: world.bird.kind, r: world.bird.r,
+          heading: Math.atan2(world.bird.body.velocity.y, world.bird.body.velocity.x),
+        }
         : null,
       effects: world.effects.map((fx) => ({ ...fx })),
     };
@@ -473,14 +595,18 @@ export function createRenderer(canvas, world) {
       const p = pulledPos();
       if (world.aimState.power > 0.02) drawTrajectory();
       drawBand(fork.back, p);
-      drawPaperBall(p.x, p.y, BIRD.radius, 0, rand, 7);
+      const kind = world.shotQueue()[0] || 'scrunch';
+      drawShot(kind, p.x, p.y, BIRD.radius, 0, world.aimState.angle, rand);
       drawBand(fork.front, p);
     } else {
       drawBand(fork.back, fork.front);
     }
     drawSlingFront(rand);
 
-    if (scene.bird) drawPaperBall(scene.bird.x, scene.bird.y, BIRD.radius, scene.bird.angle, rand, 7);
+    if (scene.bird) {
+      const b = scene.bird;
+      drawShot(b.kind, b.x, b.y, b.r, b.angle, b.heading, rand);
+    }
     drawEffects(rand, scene.effects);
   }
 

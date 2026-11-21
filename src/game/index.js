@@ -6,8 +6,10 @@
 //   game.launch({ angle, power, bird })
 //   game.on('shotDone', ({ pigsLeft, birdsUsed, score }) => ...)
 //
-// Events: levelLoaded, levelError, phase, aim, launch, pigKilled, blockBroken,
-// explode, score, shotDone, fortDestroyed, outOfBirds.
+//   game.ability()                     // fire the flying shot's one-time ability
+//
+// Events: levelLoaded, levelError, phase, aim, launch, ability, pigKilled,
+// blockBroken, explode, score, shotDone, fortDestroyed, outOfBirds.
 //
 // localInput (default true) turns on mouse drag and keyboard control on the
 // big screen, for testing before the phones are wired in.
@@ -29,6 +31,7 @@ export function createGame(canvas, { localInput = true } = {}) {
   world.on('pigKilled', () => sound.pop());
   world.on('explode', () => sound.boom());
   world.on('launch', () => sound.launch());
+  world.on('ability', () => sound.ability());
   world.on('aim', ({ power }) => sound.stretch(power));
   world.on('fortDestroyed', () => sound.win());
   world.on('outOfBirds', () => sound.lose());
@@ -93,7 +96,10 @@ export function createGame(canvas, { localInput = true } = {}) {
       else if (e.key === 'ArrowDown') world.aim({ angle: a.angle + 0.03 });
       else if (e.key === 'ArrowRight') world.aim({ power: a.power + 0.04 });
       else if (e.key === 'ArrowLeft') world.aim({ power: a.power - 0.04 });
-      else if (e.key === ' ') world.launch({ ...a });
+      else if (e.key === ' ') {
+        if (world.phase === 'flying') world.ability();
+        else world.launch({ ...a });
+      }
       else return;
       e.preventDefault();
     };
@@ -116,6 +122,7 @@ export function createGame(canvas, { localInput = true } = {}) {
     loadLevel: (level) => world.loadLevel(level),
     aim: (a) => world.aim(a),
     launch: (l) => world.launch(l),
+    ability: () => world.ability(),
     on: (name, fn) => world.on(name, fn),
     off: (name, fn) => world.off(name, fn),
     reset: () => world.reset(),

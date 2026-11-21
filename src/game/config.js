@@ -8,7 +8,7 @@ export { WORLD } from '../shared/level.js';
 // points: score for breaking it.
 export const MATERIALS = {
   wood: { density: 0.002, breakAt: 8, points: 500, friction: 0.8 },
-  ice: { density: 0.001, breakAt: 4, points: 300, friction: 0.2 },
+  ice: { density: 0.001, breakAt: 4, points: 300, friction: 0.05 }, // slippery, as in yumin-jung/angry-birds
   stone: { density: 0.005, breakAt: 15, points: 800, friction: 0.9 },
   tnt: { density: 0.002, breakAt: 2, points: 1000, friction: 0.8, explode: true },
 };
@@ -21,7 +21,7 @@ export const TNT = {
 
 export const BIRD = {
   radius: 22,
-  density: 0.004,
+  density: 0.005, // yumin-jung/angry-birds bird density
   // speed = minSpeed + power * speedRange. The plan suggested 8 + 22, but at
   // 30 units/step a full-power shot flies off screen; 22 max lands a 45° shot
   // around the far edge of the fort zone.
@@ -31,8 +31,21 @@ export const BIRD = {
   pullBack: 90, // how far the shot is drawn back at full power (visual only)
 };
 
+// Shot types and their one-time ability (space bar, or game.ability()).
+// The four abilities follow yumin-jung/angry-birds (none, speed boost, grow x2,
+// boomerang); the characters and names are our own paper designs.
+// The contract's launch payload says bird: "red"; "red" maps to Scrunch.
+export const SHOTS = {
+  scrunch: { name: 'Scrunch', radius: 22, ability: 'none' }, // crumpled paper ball
+  dart: { name: 'Dart', radius: 20, ability: 'boost', boost: 1.9 }, // paper plane
+  puff: { name: 'Puff', radius: 24, ability: 'grow', grow: 2 }, // paper bag
+  boomer: { name: 'Boomer', radius: 22, ability: 'boomerang', back: 1.2, lift: 7 }, // paper boomerang
+};
+export const SHOT_ORDER = ['scrunch', 'dart', 'puff']; // one of each per 3-shot turn
+export const SHOT_ALIASES = { red: 'scrunch', chuck: 'dart', bomb: 'puff', hal: 'boomer' };
+
 export const PIG = {
-  killImpact: 5,
+  killImpact: 4,
   points: 5000,
 };
 

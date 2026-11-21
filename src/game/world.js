@@ -1,7 +1,7 @@
 // Physics and rules. No drawing and no DOM here, so it can be tested in Node.
 import Matter from 'matter-js';
 import { validateLevel, clampPigR } from '../shared/level.js';
-import { WORLD, MATERIALS, TNT, BIRD, PIG, TIMING, SCORE } from './config.js';
+import { WORLD, MATERIALS, TNT, BIRD, PIG, TIMING, SCORE, SHOTS, SHOT_ORDER, SHOT_ALIASES } from './config.js';
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
 
@@ -130,13 +130,23 @@ export function createWorld() {
     emit('aim', { ...w.aimState });
   }
 
+  // Which shot is next: the turn's order, unless the launch asks for a
+  // specific non-default type (the contract's default is "red").
+  function nextShot(requested) {
+    const kind = SHOT_ALIASES[requested] || requested;
+    if (kind && kind !== 'scrunch' && SHOTS[kind]) return kind;
+    return SHOT_ORDER[w.birdsUsed % SHOT_ORDER.length];
+  }
+
   function launch({ angle, power, bird = 'red' } = {}) {
     if (w.phase !== 'aiming') return false;
     aim({ angle, power });
     const { angle: a, power: p } = w.aimState;
     if (p < 0.05) return false;
     const speed = BIRD.minSpeed + p * BIRD.speedRange;
-    const body = Bodies.circle(WORLD.sling.x, WORLD.sling.y, BIRD.radius, {
+    const kind = nextShot(bird);
+    const r = SHOTS[kind].radius;
+    const body = Bodies.circle(WORLD.sling.x, WORLD.sling.y, r, {
       density: BIRD.density,
       frictionAir: 0,
       friction: 0.6,
@@ -145,14 +155,46 @@ export function createWorld() {
     });
     Composite.add(engine.world, body);
     Body.setVelocity(body, { x: Math.cos(a) * speed, y: Math.sin(a) * speed });
-    w.bird = { body, kind: bird };
+    w.bird = { body, kind, r, abilityUsed: false };
     w.birdsUsed += 1;
     w.aimState.power = 0;
     w.shotStart = w.time;
     w.restSince = null;
     setPhase('flying');
-    emit('launch', { angle: a, power: p, bird });
+    emit('launch', { angle: a, power: p, bird: kind });
     return true;
+  }
+
+  // One-time ability of the shot in flight (abilities from yumin-jung/angry-birds).
+  function ability() {
+    const bird = w.bird;
+    if (w.phase !== 'flying' || !bird || bird.abilityUsed) return false;
+    bird.abilityUsed = true;
+    const spec = SHOTS[bird.kind];
+    const b = bird.body;
+    const { x, y } = b.position;
+    if (spec.ability === 'boost') {
+      Body.setVelocity(b, { x: b.velocity.x * spec.boost, y: b.velocity.y * spec.boost });
+      w.effects.push({ type: 'text', text: 'ZOOM!', x, y: y - 40, vy: -0.6, life: 40, max: 40 });
+    } else if (spec.ability === 'grow') {
+      Body.scale(b, spec.grow, spec.grow);
+      bird.r *= spec.grow;
+      w.effects.push({ type: 'text', text: 'PUFF!', x, y: y - 60, vy: -0.6, life: 40, max: 40 });
+    } else if (spec.ability === 'boomerang') {
+      Body.setVelocity(b, { x: -Math.abs(b.velocity.x) * spec.back, y: b.velocity.y - spec.lift });
+      Body.setAngularVelocity(b, 0.4);
+      w.effects.push({ type: 'text', text: 'WHOOSH!', x, y: y - 40, vy: -0.6, life: 40, max: 40 });
+    } else {
+      w.effects.push({ type: 'text', text: 'HRMPH!', x, y: y - 40, vy: -0.6, life: 40, max: 40 });
+    }
+    emit('ability', { kind: bird.kind });
+    return true;
+  }
+
+  // The shot that will be loaded next, and the ones waiting after it.
+  function shotQueue() {
+    const left = Math.max(0, BIRD.perTurn - w.birdsUsed);
+    return Array.from({ length: left }, (_, i) => SHOT_ORDER[(w.birdsUsed + i) % SHOT_ORDER.length]);
   }
 
   // Dots along the predicted flight path, for the aiming preview.
@@ -292,7 +334,7 @@ export function createWorld() {
   function endShot() {
     if (w.bird) {
       const { x, y } = w.bird.body.position;
-      w.effects.push({ type: 'puff', x, y, r: BIRD.radius, life: 24, max: 24, paper: true });
+      w.effects.push({ type: 'puff', x, y, r: w.bird.r, life: 24, max: 24, paper: true });
       Composite.remove(engine.world, w.bird.body);
       w.bird = null;
     }
@@ -364,5 +406,5 @@ export function createWorld() {
 
   addGround();
 
-  return Object.assign(w, { loadLevel, aim, launch, predictPath, step, on, off, reset });
+  return Object.assign(w, { loadLevel, aim, launch, ability, shotQueue, predictPath, step, on, off, reset });
 }

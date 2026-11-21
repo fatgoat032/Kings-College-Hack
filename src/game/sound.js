@@ -83,6 +83,10 @@ export function createSound() {
       burst({ duration: 0.35, type: 'bandpass', freq: 600, sweepTo: 2600, q: 0.8, gain: 0.5 });
       tone({ freq: 220, to: 90, duration: 0.15, type: 'triangle', gain: 0.25 });
     },
+    ability() {
+      tone({ freq: 300, to: 1200, duration: 0.25, type: 'square', gain: 0.12 });
+      burst({ duration: 0.25, type: 'bandpass', freq: 1800, sweepTo: 4000, gain: 0.35 });
+    },
     wood() {
       burst({ duration: 0.18, type: 'lowpass', freq: 900, gain: 0.7 });
       tone({ freq: 180, to: 70, duration: 0.12, type: 'square', gain: 0.08 });
