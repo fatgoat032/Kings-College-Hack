@@ -23,15 +23,13 @@ function toCanvas(v) {
   return c;
 }
 
-/** Collect labelled pictures from a parseFort result or error (searches one level deep). */
-function collectPictures(src) {
-  const out = [];
-  if (!src || typeof src !== 'object') return out;
+/** Collect labelled pictures from a parseFort result or error (e.g. debug.masks.red), 3 levels deep. */
+function collectPictures(src, prefix = '', depth = 0, out = []) {
+  if (!src || typeof src !== 'object' || depth > 2) return out;
   for (const [k, v] of Object.entries(src)) {
-    if (isPic(v)) out.push([k, v]);
-    else if (v && typeof v === 'object' && !Array.isArray(v) && k !== 'level') {
-      for (const [k2, v2] of Object.entries(v)) if (isPic(v2)) out.push([`${k}.${k2}`, v2]);
-    }
+    const label = prefix ? `${prefix}.${k}` : k;
+    if (isPic(v)) out.push([label, v]);
+    else if (v && typeof v === 'object' && !Array.isArray(v) && k !== 'level') collectPictures(v, label, depth + 1, out);
   }
   return out;
 }
