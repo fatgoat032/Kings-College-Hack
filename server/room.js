@@ -147,6 +147,20 @@ export function createRoom(code) {
     return shooter()?.id === pid ? [{ type: 'relay' }] : [];
   }
 
+  /** grip {held}: the shooter grabbed or let go of the pouch (display takes its webcam baseline). */
+  function grip(pid) {
+    if (room.phase !== 'fling' || room.inFlight) return [];
+    return shooter()?.id === pid ? [{ type: 'relay' }] : [];
+  }
+
+  /** power:update from the display goes only to the current shooter's phone. */
+  function powerUpdate(pid) {
+    const p = players.get(pid);
+    if (!p || p.role !== ROLES.DISPLAY || room.phase !== 'fling' || room.inFlight) return [];
+    const s = shooter();
+    return s ? [{ type: 'toPlayer', id: s.id }] : [];
+  }
+
   function launch(pid) {
     if (room.phase !== 'fling' || room.inFlight) return [];
     if (shooter()?.id !== pid) return [];
@@ -204,5 +218,5 @@ export function createRoom(code) {
     return [];
   }
 
-  return { code, players, state, tick, join, leave, next, fortImage, levelReady, aim, launch, ability, shotDone };
+  return { code, players, state, tick, join, leave, next, fortImage, levelReady, aim, grip, powerUpdate, launch, ability, shotDone };
 }
