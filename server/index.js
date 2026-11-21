@@ -75,17 +75,21 @@ io.on('connection', (socket) => {
   });
 
   const on = (event, action) =>
-    socket.on(event, (payload) => {
-      if (!room) return;
+    socket.on(event, (payload, ack) => {
+      if (!room) return; // no ack: the client resends after it has rejoined
       try {
         apply(action(pid, payload ?? {}), event, payload);
+        if (typeof ack === 'function') ack({ ok: true });
       } catch (err) {
         console.error(event, err);
       }
     });
 
   on(EVENTS.NEXT, (id) => room.next(id));
-  on(EVENTS.FORT_IMAGE, (id) => room.fortImage(id));
+  on(EVENTS.FORT_IMAGE, (id) => {
+    log(room.code, `fort:image from ${id}`);
+    return room.fortImage(id);
+  });
   on(EVENTS.LEVEL_READY, (id, p) => room.levelReady(id, p));
   on(EVENTS.AIM, (id) => room.aim(id));
   on(EVENTS.LAUNCH, (id) => room.launch(id));

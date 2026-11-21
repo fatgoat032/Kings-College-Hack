@@ -61,7 +61,7 @@ function start(code, name) {
     render();
   });
 
-  $('scanInput').addEventListener('change', async (e) => {
+  async function sendPhoto(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
@@ -75,7 +75,9 @@ function start(code, name) {
       scanning = false;
       render(`Could not read that photo (${err.message}). Try again.`);
     }
-  });
+  }
+  $('scanInput').addEventListener('change', sendPhoto);
+  $('uploadInput').addEventListener('change', sendPhoto);
   $('nextBtn').onclick = () => net.send(EVENTS.NEXT, {});
 
   function render(note) {
@@ -95,12 +97,13 @@ function start(code, name) {
       $('fling').hidden = screen !== 'fling';
       if (screen === 'fling') pad.resize();
     };
-    const msg = (title, text, { legend = false, scan = false, next = '', scores = false } = {}) => {
+    const msg = (title, text, { legend = false, scan = false, upload = false, next = '', scores = false } = {}) => {
       show('msg');
       $('msgTitle').textContent = title;
       $('msgText').textContent = note || text;
       $('legend').hidden = !legend;
       $('scanLabel').hidden = !scan;
+      $('uploadLabel').hidden = !(scan || upload);
       $('nextBtn').hidden = !next;
       $('nextBtn').textContent = next;
       $('scores').hidden = !scores;
@@ -123,16 +126,16 @@ function start(code, name) {
       }
       case 'draw':
         if (amDefender) {
-          msg(`Round ${round}: draw your fort`, `Team ${defender} builds. Draw on white paper, then scan it.`, { legend: true, scan: true });
+          msg(`Round ${round}: draw your fort`, `Team ${defender} builds. On paper: draw, then tap Scan fort. On an iPad: draw on a white page (Notes), save it, then tap Upload drawing.`, { legend: true, scan: true });
         } else {
-          msg('Get ready…', `Team ${defender} is drawing a fort for you to smash.`);
+          msg('Get ready…', `Team ${defender} is drawing a fort for you to smash.`, { upload: true });
         }
         break;
       case 'scan':
         if (amDefender) {
-          msg('Scanning…', scanning ? 'Photo sent! Check the big screen.' : 'If the big screen shows an error, scan again.', { scan: true });
+          msg('Scanning…', scanning ? 'Photo sent! Check the big screen.' : 'If the big screen shows an error, scan or upload again.', { scan: true });
         } else {
-          msg('Scanning…', `Team ${defender}'s fort is being built.`);
+          msg('Scanning…', `Team ${defender}'s fort is being built.`, { upload: true });
         }
         break;
       case 'fling': {

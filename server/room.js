@@ -114,7 +114,8 @@ export function createRoom(code) {
   function fortImage(pid) {
     const p = players.get(pid);
     if (room.phase !== 'draw' && room.phase !== 'scan') return [];
-    if (!actsFor(p, other(room.attacker))) return [];
+    // any phone may send the fort: a shared iPad drawing can be uploaded from whichever team it joined
+    if (!p || p.role !== ROLES.CONTROLLER) return [];
     const fx = [{ type: 'relay' }];
     if (room.phase === 'draw') {
       setPhase('scan');
