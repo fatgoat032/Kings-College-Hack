@@ -28,7 +28,21 @@ export function connect({ room, role, name, url }) {
   let aimTimer = 0;
   const minGap = 1000 / AIM_RATE;
 
+  // The fort photo must not be lost: opening the phone camera puts the page to
+  // sleep and drops the socket, and on reconnect socket.io flushes buffered
+  // packets before our join, so the server drops them. Resend until the server
+  // acks (it only acks after join), for up to ~30 s.
+  function sendReliable(event, payload, tries = 15) {
+    if (tries <= 0) return;
+    const retry = () => setTimeout(() => sendReliable(event, payload, tries - 1), 2000);
+    if (!socket.connected) return retry();
+    socket.timeout(4000).emit(event, payload, (err, res) => {
+      if (err || !res || !res.ok) retry();
+    });
+  }
+
   function send(event, payload = {}) {
+    if (event === EVENTS.FORT_IMAGE) return sendReliable(event, payload);
     if (event !== EVENTS.AIM) {
       if (event === EVENTS.LAUNCH) {
         clearTimeout(aimTimer); // a late aim must not arrive after the launch
