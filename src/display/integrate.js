@@ -10,9 +10,18 @@ import { createScanDebug } from './scanDebug.js';
 import { createDebugHud } from './hud.js';
 import { createReading } from './reading.js';
 
-// Fort detector, cycled with C on the display: vision's default (per-colour OpenCV) or the
-// hybrid OpenCV shapes + Claude colours (falls back to OpenCV by itself on any failure).
-const DETECTORS = ['opencv', 'hybrid'];
+// Fort detector, cycled with M (or C) on the display, passed to parseFort as { detector }:
+//   auto   - vision runs hybrid and Claude-only in parallel and picks one (OpenCV if both fail)
+//   hybrid - OpenCV shapes + Claude colours;  claude - Claude-only layout;  opencv - colour masks only
+const DETECTORS = ['auto', 'hybrid', 'claude', 'opencv'];
+const DETECTOR_NAMES = {
+  auto: 'auto (hybrid or Claude-only, picked per scan)',
+  hybrid: 'hybrid (OpenCV shapes + Claude colours)',
+  claude: 'Claude-only layout',
+  opencv: 'OpenCV colours only',
+};
+/** Small on-screen tag naming who read the fort. */
+const READ_BY = { hybrid: 'hybrid: OpenCV + Claude', claude: 'read by Claude', opencv: 'read by OpenCV' };
 const store = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
@@ -66,7 +75,16 @@ export function integrate({ net, ui, canvas }) {
   const scanDebug = createScanDebug(); // D toggles the vision debug overlay
   const hud = createDebugHud(); // H toggles the motion debug HUD
   const reading = createReading();
-  let detector = DETECTORS.includes(store.get('angry-sketches:detector')) ? store.get('angry-sketches:detector') : 'opencv';
+  let detector = DETECTORS.includes(store.get('angry-sketches:detector')) ? store.get('angry-sketches:detector') : 'auto';
+  const tag = document.createElement('div');
+  tag.id = 'readBy';
+  tag.hidden = true;
+  Object.assign(tag.style, {
+    position: 'fixed', left: '14px', bottom: '12px', zIndex: 20, padding: '3px 10px', pointerEvents: 'none',
+    font: "16px 'Permanent Marker', system-ui, sans-serif", color: '#2b2622', background: 'rgba(251,247,236,.85)',
+    border: '2px solid #2b2622', borderRadius: '8px',
+  });
+  document.body.append(tag);
 
   const gameReady = loadGame(canvas)
     .then((g) => {
@@ -137,13 +155,16 @@ export function integrate({ net, ui, canvas }) {
     try {
       await visionReady;
       // the phone's JPEG data URL goes to vision unchanged (no re-encode, no resize)
-      const result = await parseFort(dataUrl, detector === 'opencv' ? {} : { detector });
+      const result = await parseFort(dataUrl, { detector });
       scanDebug.record({ photo: dataUrl, result, detector });
       const t = result.timings || {};
-      hud.scan(`${result.level?.meta?.detector ?? detector}${t.claude ? ` · Claude ${Math.round(t.claude)} ms` : ''} · total ${Math.round(t.total || 0)} ms`);
+      const used = result.level?.meta?.detector;
+      hud.scan(`${detector} -> ${used ?? '?'}${result.pick?.reason ? ` (${result.pick.reason})` : ''}${t.claude ? ` · Claude ${Math.round(t.claude)} ms` : ''} · total ${Math.round(t.total || 0)} ms`);
       if (id !== parsing) return;
       const { level, page, pageToWorld } = result;
       await startLevel(level, { photo: dataUrl, page, pageToWorld });
+      tag.textContent = READ_BY[used] ?? '';
+      tag.hidden = !READ_BY[used];
     } catch (err) {
       scanDebug.record({ photo: dataUrl, error: err, detector });
       hud.scan(`${detector} · failed: ${err?.message || err}`);
@@ -190,10 +211,10 @@ export function integrate({ net, ui, canvas }) {
   window.addEventListener('keydown', (e) => {
     if ((e.key === 's' || e.key === 'S') && (phase === 'draw' || phase === 'scan' || (phase === 'fling' && !levelLoaded))) useSample();
     if (e.key === 'n' || e.key === 'N') net.send(EVENTS.NEXT, {});
-    if (e.key === 'c' || e.key === 'C') {
+    if ('mMcC'.includes(e.key) && e.key.length === 1) {
       detector = DETECTORS[(DETECTORS.indexOf(detector) + 1) % DETECTORS.length];
       store.set('angry-sketches:detector', detector);
-      toast(`Fort detector: ${detector === 'hybrid' ? 'hybrid (OpenCV shapes + Claude colours)' : 'OpenCV colours'}`);
+      toast(`Fort detector: ${DETECTOR_NAMES[detector]}`);
     }
   });
 
@@ -203,6 +224,7 @@ export function integrate({ net, ui, canvas }) {
       const { attacker, defender } = state.turn;
       if (p !== 'fling') levelLoaded = false;
       if (p !== 'fling') pendingLaunch = null;
+      if (p !== 'fling') tag.hidden = true;
       game?.setTeam?.(p === 'fling' ? attacker : null); // "TEAM A FLINGING" tag
       if (p === 'draw') {
         game?.reset?.();
