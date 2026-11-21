@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const PORT = 3917;
 const server = spawn(process.execPath, [fileURLToPath(new URL('../index.js', import.meta.url))], {
-  env: { ...process.env, SERVER_PORT: String(PORT) },
+  env: { ...process.env, SERVER_PORT: String(PORT), ANTHROPIC_API_KEY: '' }, // never call the real API from tests
   stdio: ['ignore', 'pipe', 'inherit'],
 });
 await new Promise((resolve, reject) => {
@@ -50,6 +50,14 @@ check(d.state.phase === 'fling' && d.state.turn.shooter === 'c-ann', 'level:read
 
 b.emit('launch', { angle: -0.5, power: 1, bird: 'red' }); await wait(100);
 check(!d.got.some(([e]) => e === 'launch'), 'defender launch is dropped');
+b.emit('grip', { held: true }); await wait(80);
+check(!d.got.some(([e]) => e === 'grip'), 'defender grip is dropped');
+a.emit('grip', { held: true }); await wait(100);
+check(d.got.some(([e, p]) => e === 'grip' && p.held === true), 'shooter grip reaches the display');
+d.emit('power:update', { power: 0.42, source: 'webcam' });
+a.emit('power:update', { power: 1, source: 'webcam' }); await wait(120);
+check(a.got.some(([e, p]) => e === 'power:update' && p.power === 0.42) && !b.got.some(([e]) => e === 'power:update') && !a.got.some(([e, p]) => e === 'power:update' && p.power === 1),
+  'display power:update goes only to the shooter; a phone cannot send it');
 a.emit('aim', { angle: -0.5, power: 0.5 });
 a.emit('launch', { angle: -0.5, power: 0.9, bird: 'red' }); await wait(150);
 check(d.got.some(([e]) => e === 'aim') && d.got.some(([e]) => e === 'launch') && d.state.turn.inFlight, 'shooter aim + launch relayed, inFlight');
@@ -109,6 +117,36 @@ check(d.state.turn.round === 2 && d.state.turn.attacker === 'A', 'round 2, A att
   const early = r.tick(Date.now() + 5000).length;
   const late = r.tick(Date.now() + 25000).length;
   check(early === 0 && late === 1 && !r.state().turn.inFlight && r.launch('pa').length > 0, 'a launch with no shot:done is cleared after 20 s and the shooter can fire again');
+}
+// Claude endpoints: without a key they answer { error } at once (vision falls back to OpenCV)
+{
+  const st = await fetch(`${BASE}/api/claude/status`).then((r) => r.json());
+  const t0 = Date.now();
+  const cl = await fetch(`${BASE}/api/classify`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ annotated: 'data:image/jpeg;base64,AAAA', clean: 'data:image/jpeg;base64,AAAA', count: 3 }) }).then((r) => r.json());
+  check(st.enabled === false && /ANTHROPIC_API_KEY/.test(cl.error) && Date.now() - t0 < 1000, 'no key: /api/classify answers { error } fast');
+}
+// Claude endpoints with a fake client: structured answers are tidied to the contract
+{
+  const { createClaude } = await import('../claude.js');
+  const reply = (obj) => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(obj) }] });
+  let sent = null;
+  const fake = (obj) => ({ messages: { create: async (p) => ((sent = p), reply(obj)) } });
+  const img = 'data:image/jpeg;base64,' + 'A'.repeat(40);
+  const c1 = createClaude({ client: fake({ shapes: [{ n: 2, colour: 'red', kind: 'block', confidence: 1.7 }, { n: 2, colour: 'blue', kind: 'block', confidence: 0.9 }, { n: 9, colour: 'blue', kind: 'block', confidence: 1 }, { n: 1, colour: 'pink', kind: 'pig', confidence: 0.8 }] }), log: () => {} });
+  const r1 = await c1.classify({ annotated: img, clean: img, count: 3 });
+  check(JSON.stringify(r1.shapes) === JSON.stringify([
+    { n: 1, colour: 'other', kind: 'pig', confidence: 0.8 },
+    { n: 2, colour: 'red', kind: 'block', confidence: 1 },
+    { n: 3, colour: 'other', kind: 'block', confidence: 0 },
+  ]) && sent.messages[0].content.filter((b) => b.type === 'image').length === 2 && sent.output_config.format.type === 'json_schema',
+  'classify: one answer per number, bad values tidied, missing numbers get confidence 0, both images sent');
+  const c2 = createClaude({ client: fake({ blocks: [{ colour: 'grey', x: 0.5, y: 0.8, w: 0.1, h: 0.3, angle: 0 }, { colour: 'red', x: 1.4, y: 0.5, w: 0.1, h: 0.1, angle: 0 }], pigs: [{ x: 0.6, y: 0.9, r: 0.03 }] }), log: () => {} });
+  const r2 = await c2.layout({ clean: img });
+  check(r2.blocks.length === 1 && r2.blocks[0].colour === 'grey' && r2.pigs.length === 1, 'layout: off-page entries dropped');
+  const c3 = createClaude({ client: { messages: { create: async () => ({ stop_reason: 'refusal', content: [] }) } }, log: () => {} });
+  let err = '';
+  try { await c3.layout({ clean: img }); } catch (e) { err = e.message; }
+  check(/declined/.test(err), 'refusal becomes an error (vision falls back)');
 }
 console.log(fails ? `${fails} FAILED` : 'all passed');
 finish(fails ? 1 : 0);

@@ -13,6 +13,7 @@
     "dev:https": "concurrently -k -n server,vite -c blue,green \"npm:dev:server\" \"vite --mode https\""
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
     "express": "^4.21.2",
     "howler": "^2.2.4",
     "matter-js": "^0.20.0",
