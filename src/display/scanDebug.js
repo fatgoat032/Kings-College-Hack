@@ -172,8 +172,9 @@ export function createScanDebug() {
     if (detector || used) summary += ` · detector: ${used ?? '?'}${detector && used && detector !== used && detector !== 'auto' ? ` (asked ${detector}, fell back)` : ''}`;
     if (result?.timings?.claude) summary += ` · Claude ${Math.round(result.timings.claude)} ms`;
     if (result?.timings?.total) summary += ` · ${Math.round(result.timings.total)} ms`;
+    if (!result?.pick && error?.pick) summary += ` · auto-pick: ${error.pick.chose}`;
     if (result?.pick) summary += ` · auto-pick: ${result.pick.chose}`;
-    last = { when: new Date().toLocaleTimeString(), pictures, summary, candidates: result?.candidates, pick: result?.pick };
+    last = { when: new Date().toLocaleTimeString(), pictures, summary, candidates: result?.candidates ?? error?.candidates, pick: result?.pick ?? error?.pick };
     console.info('[scan]', summary, result || error);
     if (!root.hidden) render();
   }
