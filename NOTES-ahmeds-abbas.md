@@ -4,15 +4,19 @@
 - `npm i && npm run dev` starts Vite on :5173 (LAN) and the socket server on :3000. Vite proxies `/socket.io` and `/api`, so phones only need `http://<laptop-ip>:5173`.
 - Pages: `/display.html` (big screen, makes a room code), `/controller.html?room=XXXX` (phone), `/src/net/fake-display.html?room=XXXX` (logs events, fakes level:ready/shot:done), `/src/game/dev.html` (game alone, once merged).
 - `npm test` runs the end-to-end socket flow test (needs the server running on :3000).
-- Display keys: S = use a sample fort, N = next, L = event log, D = vision debug overlay of the last scan (photo, every debug canvas parseFort returns, blocks per material, thicknesses).
+- Display keys: S = use a sample fort, N = next, L = event log, D = vision debug overlay of the last scan (photo, every debug canvas parseFort returns, blocks per material, thicknesses, detector, Claude ms), H = motion debug HUD (angle, power, source, grip, msgs/s, phone sensor Hz, webcam power sent, last scan), C = cycle the fort detector opencv / hybrid (remembered).
+- Claude: `.env` with ANTHROPIC_API_KEY (optional CLAUDE_MODEL, default claude-sonnet-5-5). The server prints "Claude scanning on/off" at startup; `curl localhost:3000/api/claude/status`.
 
 ## Motion slingshot (HTTPS)
 Phones only give motion sensors to HTTPS pages, so the tilt-and-swing slingshot needs `npm run dev:https`
 (Vite with @vitejs/plugin-basic-ssl, a self-signed cert). On plain `npm run dev` (http) phones use the drag pad automatically.
 
-How it plays: hold anywhere on the phone = grab (click + buzz), tilt the phone to aim (upright = flat shot,
-tip the top away from you to aim higher, 0-80°), swing it forward and lift your thumb = launch. Power comes from the
-peak swing acceleration around the release. Lifting without a swing cancels ("SWING IT!"). Tap during flight = ability.
+How it plays (hold the phone upright, portrait): hold anywhere = grip (click + buzz), and the aim starts at 45°.
+Turn the phone like a steering wheel: left = higher, right = flatter (0-85°, ±3° dead zone). "Flip aim" swaps the
+direction. Pull: with the webcam tracking your hand on the big screen, pull your hand back. Otherwise tip the top of
+the phone back towards you (35° = full power). The phone buzzes harder as power fills. Lift your thumb = launch;
+under 8% power cancels ("PULL BACK!"). Tap during flight = ability. "Pull: auto/webcam/tilt" forces the source.
+Lobby "🎯 Test aim" shows the live angle and pull before playing; press H on the display to compare the numbers.
 "Use drag instead" switches modes (remembered per phone). If no sensor data arrives within ~2 s it falls back to drag.
 
 Accepting the self-signed cert (do the laptop first, then each phone, with the same URL the QR shows):
