@@ -15,8 +15,15 @@ export const EVENTS = Object.freeze({
   FORT_IMAGE: 'fort:image',
   /** display -> server: { blocks: n, pigs: n } */
   LEVEL_READY: 'level:ready',
-  /** controller -> server -> display: { angle, power }, at most 20 per second */
+  /** controller -> server -> display: { angle, power, source? }, at most 20 per second while gripping.
+   *  This is the "grip:move" stream. source: "webcam" | "tilt" | "drag" (where power came from). */
   AIM: 'aim',
+  /** controller -> server -> display: { held: true } on grip start, { held: false, cancel? } on release.
+   *  The display stores the webcam hand size at grip start (the pull-by-webcam baseline). */
+  GRIP: 'grip',
+  /** display -> server -> the shooter's phone only: { power, source: "webcam" | "tilt" }, up to 20/s
+   *  while gripping. Live pull power measured on the big screen, so the phone can show a meter and buzz. */
+  POWER_UPDATE: 'power:update',
   /** controller -> server -> display: { angle, power, bird: "red" } */
   LAUNCH: 'launch',
   /** controller -> server -> display: {} . Fires the flying bird's one-time ability (game.ability()). */
@@ -43,6 +50,9 @@ export const AIM_RATE = 20;
 
 /** Max width of a fort:image JPEG, in pixels. */
 export const FORT_IMAGE_MAX_W = 1280;
+
+/** Where launch power came from (AIM.source, POWER_UPDATE.source). */
+export const POWER_SOURCES = Object.freeze(['webcam', 'tilt', 'drag']);
 
 // room:state shape (documentation only):
 // {
