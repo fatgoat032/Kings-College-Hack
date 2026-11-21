@@ -19,7 +19,7 @@ import { detect } from './pipeline.js';
 import { buildLevel, checkLevel, pageTransform } from './geometry.js';
 import { loadSettings } from './settings.js';
 import { findShapesByColour } from './findShapes.js';
-import { decideShapes, shapesToLevel, layoutToLevel } from './hybridLevel.js';
+import { decideShapes, shapesToLevel, layoutToLevel, cleanLayout, classifyStats, pickCandidate } from './hybridLevel.js';
 import { CLASSIFY_MAX_SHAPES } from '../shared/classify.js';
 
 const MAX_INPUT_W = 1280; // plan: photos arrive at max 1280 px wide
@@ -99,22 +99,112 @@ export async function parseFortOpenCV(imageSource, options = {}) {
 }
 
 /**
- * Team Fix #2 hybrid (OpenCV shapes + Claude colours via /api/classify, or Claude's own
- * layout via /api/layout for 0 or >60 shapes) is OPT-IN: parseFort(img, { detector: 'hybrid' }).
- * Default stays the per-colour OpenCV detector, because the brief's single ink mask merges
- * touching blocks of different colours into one shape (see /fixtures/hybrid-check.html), which
- * made real forts worse. ANY hybrid problem (no key, no internet, timeout, invalid level, no pig)
- * falls back to parseFortOpenCV. result.level.meta.detector says which path produced the level.
+ * parseFort(img, { detector }) with detector 'auto' (default) | 'hybrid' | 'claude' | 'opencv'.
+ *
+ * auto (17:24 brief): run HYBRID (OpenCV per-colour shapes + /api/classify) and CLAUDE-ONLY
+ * (/api/layout + clean-up: snap angles within 8°, settle blocks, drop pigs) in parallel with one
+ * shared 10 s timeout, then pick: HYBRID if Claude answered every shape, average confidence
+ * >= 0.7 and its block count is within ±30% of CLAUDE-ONLY's; otherwise CLAUDE-ONLY; if only
+ * one worked, that one; if both failed (or no key / no internet), the OpenCV detector.
+ *
+ * Extra result fields: candidates = { hybrid?, claude?, opencv? }, each
+ * { ok, level?, error?, ms, avgConfidence?, complete?, overlay? }, and pick = { chose, reason }.
+ * level.meta.detector says which one was used. A failed scan carries both on the error too.
  */
 export async function parseFort(imageSource, options = {}) {
-  if (options.detector === 'hybrid') {
-    try {
-      return await parseFortHybrid(imageSource, options);
-    } catch (err) {
-      console.info('[vision] hybrid detector not used:', err?.message || err);
-    }
+  const mode = options.detector ?? 'auto';
+  const t0 = performance.now();
+  const candidates = {};
+
+  // OpenCV always runs locally: it's the fallback and costs well under a second.
+  let opencv = null;
+  const tO = performance.now();
+  try {
+    opencv = await parseFortOpenCV(imageSource, options);
+    candidates.opencv = { ok: true, level: opencv.level, ms: Math.round(performance.now() - tO), overlay: opencv.debug.overlay };
+  } catch (err) {
+    candidates.opencv = { ok: false, error: err.message, ms: Math.round(performance.now() - tO), overlay: err.debug?.overlay };
+    opencv = { error: err };
   }
-  return parseFortOpenCV(imageSource, options);
+
+  let pick;
+  let claudeBase = null;
+  if (mode === 'opencv') {
+    pick = { chose: 'opencv', reason: 'OpenCV requested' };
+  } else if (!(await claudeEnabled())) {
+    pick = { chose: 'opencv', reason: 'Claude not configured on the server' };
+  } else {
+    const cv = await loadCv();
+    const settings = options.settings ?? loadSettings();
+    const imageData = await toImageData(imageSource);
+    const fs = findShapesByColour(cv, imageData, settings);
+    claudeBase = fs;
+    const meta = { imageW: imageData.width, imageH: imageData.height, paperFound: fs.paperFound };
+    const jpeg = (c) => c.toDataURL('image/jpeg', 0.85);
+    const clean = jpeg(fs.canvases.clean);
+    const signal = AbortSignal.timeout(10_000); // one shared timeout for both calls
+
+    const runHybrid = async () => {
+      if (fs.shapes.length < 1 || fs.shapes.length > CLASSIFY_MAX_SHAPES) throw new Error(`${fs.shapes.length} shapes: outside 1-${CLASSIFY_MAX_SHAPES}`);
+      const res = await postJson('/api/classify', { annotated: jpeg(fs.canvases.annotated), clean, count: fs.shapes.length }, signal);
+      const level = shapesToLevel(decideShapes(fs.shapes, res.shapes), fs.pageW, fs.pageH, { ...meta, detector: 'hybrid' });
+      return { level, ...classifyStats(res.shapes, fs.shapes.length) };
+    };
+    const runClaude = async () => {
+      const res = await postJson('/api/layout', { clean }, signal);
+      return { level: cleanLayout(layoutToLevel(res, fs.pageW, fs.pageH, { ...meta, detector: 'claude' })) };
+    };
+    const timed = async (name, fn) => {
+      const t = performance.now();
+      try {
+        const r = await fn();
+        const check = checkLevel(r.level);
+        if (!check.ok) throw new Error(check.message);
+        candidates[name] = { ok: true, ...r, ms: Math.round(performance.now() - t), overlay: fs.canvases.annotated };
+      } catch (err) {
+        candidates[name] = { ok: false, error: err?.message || String(err), ms: Math.round(performance.now() - t) };
+      }
+    };
+    const jobs = [];
+    if (mode === 'auto' || mode === 'hybrid') jobs.push(timed('hybrid', runHybrid));
+    if (mode === 'auto' || mode === 'claude') jobs.push(timed('claude', runClaude));
+    await Promise.allSettled(jobs);
+
+    if (mode === 'auto') pick = pickCandidate(candidates);
+    else if (candidates[mode]?.ok) pick = { chose: mode, reason: `${mode} requested` };
+    else pick = { chose: 'opencv', reason: `${mode} requested but failed: ${candidates[mode]?.error}` };
+  }
+
+  // Build the result around the chosen level
+  if (pick.chose === 'opencv') {
+    if (opencv.error) {
+      opencv.error.candidates = candidates;
+      opencv.error.pick = pick;
+      throw opencv.error;
+    }
+    opencv.level.meta.detector = 'opencv';
+    return { ...opencv, candidates, pick, timings: { ...opencv.timings, total: performance.now() - t0 } };
+  }
+  const chosen = candidates[pick.chose];
+  const fs = claudeBase;
+  const copy = (c) => {
+    const d = document.createElement('canvas');
+    d.width = c.width;
+    d.height = c.height;
+    d.getContext('2d').drawImage(c, 0, 0);
+    return d;
+  };
+  return {
+    level: chosen.level,
+    debugCanvas: fs.canvases.annotated,
+    page: fs.canvases.clean,
+    pageToWorld: pageTransform(fs.pageW, fs.pageH),
+    debug: { overlay: copy(fs.canvases.annotated), masks: fs.masks },
+    warnings: fs.paperFound ? [] : ['Paper edges not found: used the whole photo'],
+    candidates,
+    pick,
+    timings: { claude: chosen.ms, total: performance.now() - t0 },
+  };
 }
 
 let statusCache = null; // { enabled, at }
@@ -129,62 +219,17 @@ async function claudeEnabled() {
   return enabled;
 }
 
-async function postJson(url, body, ms) {
+async function postJson(url, body, signal) {
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(ms),
+    signal,
   });
   if (!r.ok) throw new Error(`${url} answered ${r.status}`);
   const json = await r.json();
   if (json.error) throw new Error(`${url}: ${json.error}`);
   return json;
-}
-
-async function parseFortHybrid(imageSource, options) {
-  const t0 = performance.now();
-  if (!(await claudeEnabled())) throw new Error('Claude not configured on the server');
-  const cv = await loadCv();
-  const settings = options.settings ?? loadSettings();
-  const imageData = await toImageData(imageSource);
-  const fs = findShapesByColour(cv, imageData, settings);
-  const jpeg = (c) => c.toDataURL('image/jpeg', 0.85);
-  const meta = { imageW: imageData.width, imageH: imageData.height, paperFound: fs.paperFound };
-
-  let level;
-  let claudeMs = 0;
-  if (fs.shapes.length >= 1 && fs.shapes.length <= CLASSIFY_MAX_SHAPES) {
-    const t = performance.now();
-    const res = await postJson('/api/classify', { annotated: jpeg(fs.canvases.annotated), clean: jpeg(fs.canvases.clean), count: fs.shapes.length }, 15000);
-    claudeMs = performance.now() - t;
-    level = shapesToLevel(decideShapes(fs.shapes, res.shapes), fs.pageW, fs.pageH, { ...meta, detector: 'hybrid' });
-  } else {
-    const t = performance.now();
-    const res = await postJson('/api/layout', { clean: jpeg(fs.canvases.clean) }, 15000);
-    claudeMs = performance.now() - t;
-    level = layoutToLevel(res, fs.pageW, fs.pageH, { ...meta, detector: 'claude' });
-  }
-
-  const check = checkLevel(level);
-  if (!check.ok) throw new Error(`hybrid level rejected: ${check.message}`);
-
-  const copy = (c) => {
-    const d = document.createElement('canvas');
-    d.width = c.width;
-    d.height = c.height;
-    d.getContext('2d').drawImage(c, 0, 0);
-    return d;
-  };
-  return {
-    level,
-    debugCanvas: fs.canvases.annotated,
-    page: fs.canvases.clean,
-    pageToWorld: pageTransform(fs.pageW, fs.pageH),
-    debug: { overlay: copy(fs.canvases.annotated), masks: fs.masks },
-    warnings: fs.paperFound ? [] : ['Paper edges not found: used the whole photo'],
-    timings: { claude: claudeMs, total: performance.now() - t0 },
-  };
 }
 
 /** An Error the display can show to players as-is. */

@@ -85,6 +85,14 @@ Saving the last scan to `public/fixtures/last-scan/` needs a file write, which t
 - `parseFort(img, { detector: 'hybrid' })`: findShapesByColour (per-colour masks, touching blocks stay separate; OpenCV colour kept as each shape's guess), then POST /api/classify (or /api/layout for 0 or >60 shapes), Claude's colour if confidence >= 0.5 else our HSV guess, green = pig (min enclosing circle), meta.detector hybrid|claude. Any failure falls back to the OpenCV detector.
 - **Default is still the per-colour OpenCV detector (`meta.detector = "opencv"`).** Reason: one ink mask merges touching blocks of different colours (black pillars + blue beam + red TNT become ONE shape), so real forts came out worse. Evidence: /fixtures/hybrid-check.html. Switching the default is one line in parseFort.js once shapes come from per-colour masks.
 
+## Auto-pick (17:24 brief) — `parseFort(dataUrl, { detector })`, default `'auto'`
+
+- `auto`: OpenCV runs locally; HYBRID (/api/classify) and CLAUDE-ONLY (/api/layout + `cleanLayout`: snap within 8°, settle blocks bottom-up onto ground/blocks, drop pigs onto surfaces) run in parallel with ONE shared 10 s timeout.
+- Pick (`pickCandidate`): HYBRID if every shape answered, avg confidence >= 0.7 and block count within ±30% of CLAUDE-ONLY; else CLAUDE-ONLY; only one ok -> that one; both failed / no key -> OPENCV.
+- `result.candidates = { opencv, hybrid?, claude? }`, each `{ ok, level?, error?, ms, avgConfidence?, complete?, overlay? }`; `result.pick = { chose, reason }`; `level.meta.detector` = the one used. Failed scans carry both on the error.
+- `'hybrid'` / `'claude'` / `'opencv'` force one path (falling back to OpenCV if it fails).
+- Checks: unit tests 18/18; /fixtures/auto-check.html (simulated Claude): good -> hybrid, unsure -> claude, down -> opencv; fixtures 10/10 in auto mode without a key.
+
 ## Known limits
 
 - A diagonal block touching another block of the same colour can be lost when the blob is split into bars.
