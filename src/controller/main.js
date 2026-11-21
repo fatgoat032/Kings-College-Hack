@@ -13,6 +13,7 @@ const store = {
 };
 
 const params = new URLSearchParams(location.search);
+const TEST = params.has('test'); // read before the join form rewrites the URL
 const room = (params.get('room') || '').toUpperCase();
 
 if (!/^[A-Z]{4}$/.test(room)) showJoinForm();
@@ -75,25 +76,24 @@ function start(code, name) {
     ...callbacks,
     onFeedback: (kind) => {
       if (kind === 'launched') flash('LAUNCHED!');
+      else if (kind === 'calibrated') flash('READY!');
       else if (kind === 'nopull') flash('PULL BACK!');
     },
   });
   net.on(EVENTS.POWER_UPDATE, ({ power } = {}) => motionPad.setWebcamPower(power));
 
   // motion settings, remembered per phone
-  let flip = store.get('angry-sketches:flip') === '1';
-  let pullMode = store.get('angry-sketches:pull') || 'auto';
-  motionPad.setFlip(flip);
+  // tilt-pull is the main power source; the webcam is optional (off by default)
+  let pullMode = store.get('angry-sketches:pull2') || 'tilt';
   motionPad.setPullMode(pullMode);
-  $('flipBtn').onclick = () => {
-    flip = !flip;
-    store.set('angry-sketches:flip', flip ? '1' : '0');
-    motionPad.setFlip(flip);
+  $('calBtn').onclick = () => {
+    motionPad.calibrate();
     render();
   };
+  if (TEST) window.__motionPad = motionPad; // headless tests
   $('pullBtn').onclick = () => {
-    pullMode = { auto: 'webcam', webcam: 'tilt', tilt: 'auto' }[pullMode] || 'auto';
-    store.set('angry-sketches:pull', pullMode);
+    pullMode = { tilt: 'webcam', webcam: 'auto', auto: 'tilt' }[pullMode] || 'tilt';
+    store.set('angry-sketches:pull2', pullMode);
     motionPad.setPullMode(pullMode);
     render();
   };
@@ -198,8 +198,9 @@ function start(code, name) {
         $('modeBtn').textContent = useMotion ? 'Use drag instead' : 'Use motion slingshot';
         $('pullBtn').hidden = !useMotion;
         $('pullBtn').textContent = `Pull: ${pullMode}`;
-        $('flipBtn').hidden = !useMotion;
-        $('flipBtn').textContent = flip ? 'Aim: flipped' : 'Flip aim';
+        $('calBtn').hidden = !useMotion;
+        // first time on this phone: run the calibration wizard (turn right, tilt back)
+        if (useMotion && motionGranted && motionPad.needsCalibration() && !motionPad.isCalibrating()) motionPad.calibrate();
         $('testDone').hidden = !testing;
         pad.resize();
       }
