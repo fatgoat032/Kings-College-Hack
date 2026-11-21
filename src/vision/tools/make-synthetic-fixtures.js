@@ -99,12 +99,38 @@ for (const c of cases) {
   fs.writeFileSync(`${OUT}/${c.name}.expected.json`, JSON.stringify(c.exp, null, 2) + '\n');
 }
 
+
+// ---- P4 bird drawings: simple shapes, expected pointiness ranges -------------
+function birdPhoto(shape) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="960" viewBox="0 0 1280 960">
+  <rect width="1280" height="960" fill="#6b5a48"/>
+  <rect x="240" y="197" width="800" height="566" fill="#fbfbf7"/>
+  <g transform="translate(640 480)" fill="#c2185b">${shape}</g>
+</svg>
+`;
+}
+const starPts = Array.from({ length: 10 }, (_, i) => {
+  const r = i % 2 ? 45 : 130;
+  const a = (i / 10) * 2 * Math.PI - Math.PI / 2;
+  return `${(r * Math.cos(a)).toFixed(1)},${(r * Math.sin(a)).toFixed(1)}`;
+}).join(' ');
+const birds = [
+  { name: 'bird-round', note: 'Round blob: heavy, not pointy', shape: '<circle r="110"/>', exp: { bird: { pointiness: [0, 0.08] } } },
+  { name: 'bird-triangle', note: 'Triangle: medium pointy', shape: '<polygon points="-120,80 120,80 0,-128"/>', exp: { bird: { pointiness: [0.28, 0.45] } } },
+  { name: 'bird-star', note: 'Star: very pointy', shape: `<polygon points="${starPts}"/>`, exp: { bird: { pointiness: [0.5, 1] } } },
+];
+for (const b of birds) {
+  fs.writeFileSync(`${OUT}/${b.name}.svg`, birdPhoto(b.shape));
+  fs.writeFileSync(`${OUT}/${b.name}.expected.json`, JSON.stringify(b.exp, null, 2) + '\n');
+}
+
 // Manifest: keep real photos already listed, replace synthetic entries.
 const manifestPath = `${OUT}/fixtures.json`;
 const old = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : [];
-const real = old.filter((f) => !f.name.startsWith('synthetic-'));
+const real = old.filter((f) => !f.name.startsWith('synthetic-') && !f.name.startsWith('bird-'));
 const manifest = [
   ...cases.map((c) => ({ name: c.name, image: `${c.name}.svg`, expected: `${c.name}.expected.json`, note: c.note })),
+  ...birds.map((b) => ({ name: b.name, type: 'bird', image: `${b.name}.svg`, expected: `${b.name}.expected.json`, note: b.note })),
   ...real,
 ];
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');

@@ -81,7 +81,7 @@ export function visionError(message) {
 }
 
 /** Any supported image source -> RGBA ImageData, scaled to at most 1280 px wide. */
-async function toImageData(source) {
+export async function toImageData(source) {
   let drawable = source;
   if (typeof source === 'string') drawable = await loadImage(source);
   else if (typeof Blob !== 'undefined' && source instanceof Blob) drawable = await createImageBitmap(source);

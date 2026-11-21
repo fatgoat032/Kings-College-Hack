@@ -90,3 +90,30 @@ test('rangeAround wraps red hue', () => {
   assert.ok(r.h[0] > r.h[1], 'wraps');
   assert.deepEqual(rangeAround('black', [0, 10, 30]).h, [0, 180]);
 });
+
+import { polygonArea, pointiness, normalisePolygon, birdFromOutline } from '../birdShape.js';
+
+const circle = Array.from({ length: 48 }, (_, i) => ({ x: 100 + 50 * Math.cos((i / 48) * 2 * Math.PI), y: 100 + 50 * Math.sin((i / 48) * 2 * Math.PI) }));
+const triangle = [{ x: 0, y: 100 }, { x: 100, y: 100 }, { x: 50, y: 13.4 }];
+const star = Array.from({ length: 10 }, (_, i) => {
+  const r = i % 2 ? 20 : 60;
+  const a = (i / 10) * 2 * Math.PI;
+  return { x: 100 + r * Math.cos(a), y: 100 + r * Math.sin(a) };
+});
+
+test('bird pointiness: circle < triangle < star', () => {
+  const [c, t, s] = [pointiness(circle), pointiness(triangle), pointiness(star)];
+  assert.ok(c < 0.02, `circle ${c}`);
+  assert.ok(t > 0.3 && t < 0.45, `triangle ${t}`);
+  assert.ok(s > 0.55, `star ${s}`);
+});
+
+test('bird polygon is centred with max radius 1, area is a page fraction', () => {
+  const poly = normalisePolygon(triangle);
+  const rMax = Math.max(...poly.map((p) => Math.hypot(p.x, p.y)));
+  assert.ok(Math.abs(rMax - 1) < 0.002);
+  const cx = poly.reduce((s, p) => s + p.x, 0) / poly.length;
+  assert.ok(Math.abs(cx) < 0.01);
+  const b = birdFromOutline(triangle, 1000 * 1000);
+  assert.equal(b.area, Math.round((polygonArea(triangle) / 1e6) * 10000) / 10000);
+});

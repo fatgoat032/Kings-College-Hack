@@ -26,13 +26,25 @@ const { level, debugCanvas, warnings } = await parseFort(dataUrlOrImageOrCanvas)
 | P1 | Lighting flattening, HSV masks, morphological close | ✅ |
 | P1 | Blocks (minAreaRect), touching same-colour blocks split into bars | ✅ |
 | P1 | Pigs (minEnclosingCircle), page → fort zone mapping, validateLevel, zero-pig error | ✅ |
-| P1 | Fixtures page + 4 synthetic fixtures (flat, tilted, dim, no pig): **4/4 pass** | ✅ |
+| P1 | Fixtures page + synthetic fixtures (flat, tilted, dim, no pig, 3 birds): **7/7 pass** | ✅ |
 | P1 | 8 real test photos + expected JSON | ⏳ abdurub is drawing them |
 | P2 | Real `parseFort` on branch `vision`, ready for @Ahmeds-abbas to merge | ✅ |
 | P3 | Snap near-flat blocks (within 6°) | ✅ (in geometry.js) |
 | P3 | Calibration screen (`/src/vision/calibrate.html`): load photo, tap a stroke to sample a colour, HSV sliders, live mask, saved to localStorage | ✅ |
-| P4 | Bonus: draw-your-own-bird polygon | ⏳ |
+| P4 | Bonus: `parseBird()` → `{ polygon, area, pointiness }` for @fatgoat032 | ✅ |
 | P5 | Real-photo pass rate in README | ⏳ |
+
+## Bird API (P4, for @fatgoat032)
+
+```js
+import { parseBird } from './src/vision/index.js';
+const { bird, debugCanvas } = await parseBird(dataUrlOrImage);
+// bird.area        0-1 share of the page covered      -> bigger = heavier
+// bird.pointiness  0 round … ~0.4 triangle … 0.75 star -> pointier = faster, smaller hitbox
+// bird.polygon     [{x,y}] centred on 0,0, farthest point at radius 1 (y down, <= 24 vertices)
+//                  scale by the bird radius for Matter.Bodies.fromVertices
+```
+Any marker colour works for the bird. Measured: round blob 0.013, triangle 0.395, star 0.759.
 
 ## How to test
 

@@ -30,38 +30,8 @@ export function detect(cv, imageData, settings) {
   const keep = (m) => (mats.push(m), m);
 
   try {
-    const src = keep(cv.matFromImageData(imageData));
-
-    // ---- 1. find the paper and flatten it -------------------------------------
-    const quad = findPaper(cv, src, keep);
-    const paperFound = quad !== null;
-    const corners = quad ?? [
-      { x: 0, y: 0 }, { x: src.cols - 1, y: 0 },
-      { x: src.cols - 1, y: src.rows - 1 }, { x: 0, y: src.rows - 1 },
-    ];
-    const [tl, tr, br, bl] = corners;
-    const quadW = Math.max(dist(tl, tr), dist(bl, br));
-    const quadH = Math.max(dist(tl, bl), dist(tr, br));
-    const k = PAGE_LONG_SIDE / Math.max(quadW, quadH);
-    const pageW = Math.round(quadW * k);
-    const pageH = Math.round(quadH * k);
-
-    const from = keep(cv.matFromArray(4, 1, cv.CV_32FC2, corners.flatMap((p) => [p.x, p.y])));
-    const to = keep(cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, pageW, 0, pageW, pageH, 0, pageH]));
-    const M = keep(cv.getPerspectiveTransform(from, to));
-    const page = keep(new cv.Mat());
-    cv.warpPerspective(src, page, M, new cv.Size(pageW, pageH), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
-
-    // Trim a thin border: paper edges and the table often sneak in after warping.
-    const trim = Math.round(Math.min(pageW, pageH) * 0.015);
-    const inner = keep(page.roi(new cv.Rect(trim, trim, pageW - 2 * trim, pageH - 2 * trim)).clone());
-    const W = inner.cols;
-    const H = inner.rows;
-
-    // ---- 2. even out lighting ---------------------------------------------------
-    const rgb = keep(new cv.Mat());
-    cv.cvtColor(inner, rgb, cv.COLOR_RGBA2RGB);
-    flattenLighting(cv, rgb, keep);
+    // ---- 1 + 2. flatten the paper and even out the lighting ---------------------
+    const { rgb, W, H, paperFound } = preparePage(cv, imageData, keep);
 
     // ---- 3. colour masks ----------------------------------------------------------
     const hsv = keep(new cv.Mat());
@@ -140,6 +110,44 @@ export function detect(cv, imageData, settings) {
       try { m.delete(); } catch { /* already freed */ }
     }
   }
+}
+
+/**
+ * Photo -> flat, lighting-corrected RGB page (cv.Mat registered with keep()).
+ * Shared by detect() (forts) and detectBird().
+ */
+export function preparePage(cv, imageData, keep) {
+  const src = keep(cv.matFromImageData(imageData));
+
+  // find the paper and flatten it
+  const quad = findPaper(cv, src, keep);
+  const paperFound = quad !== null;
+  const corners = quad ?? [
+    { x: 0, y: 0 }, { x: src.cols - 1, y: 0 },
+    { x: src.cols - 1, y: src.rows - 1 }, { x: 0, y: src.rows - 1 },
+  ];
+  const [tl, tr, br, bl] = corners;
+  const quadW = Math.max(dist(tl, tr), dist(bl, br));
+  const quadH = Math.max(dist(tl, bl), dist(tr, br));
+  const k = PAGE_LONG_SIDE / Math.max(quadW, quadH);
+  const pageW = Math.round(quadW * k);
+  const pageH = Math.round(quadH * k);
+
+  const from = keep(cv.matFromArray(4, 1, cv.CV_32FC2, corners.flatMap((p) => [p.x, p.y])));
+  const to = keep(cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, pageW, 0, pageW, pageH, 0, pageH]));
+  const M = keep(cv.getPerspectiveTransform(from, to));
+  const page = keep(new cv.Mat());
+  cv.warpPerspective(src, page, M, new cv.Size(pageW, pageH), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
+
+  // Trim a thin border: paper edges and the table often sneak in after warping.
+  const trim = Math.round(Math.min(pageW, pageH) * 0.015);
+  const inner = keep(page.roi(new cv.Rect(trim, trim, pageW - 2 * trim, pageH - 2 * trim)).clone());
+
+  // even out the lighting
+  const rgb = keep(new cv.Mat());
+  cv.cvtColor(inner, rgb, cv.COLOR_RGBA2RGB);
+  flattenLighting(cv, rgb, keep);
+  return { rgb, W: inner.cols, H: inner.rows, paperFound };
 }
 
 /** Largest bright 4-sided shape covering at least 20% of the photo, or null. */

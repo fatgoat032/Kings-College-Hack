@@ -30,7 +30,7 @@
   <div class="grid" id="grid"></div>
 
   <script type="module">
-    import { parseFort, ready } from '/src/vision/index.js';
+    import { parseFort, parseBird, ready } from '/src/vision/index.js';
     import { compareLevels } from '/src/vision/compare.js';
 
     const grid = document.getElementById('grid');
@@ -55,6 +55,13 @@
       let detail = '';
       let lines = [];
       try {
+        if (f.type === 'bird') {
+          const { bird, debugCanvas } = await parseBird(`./${f.image}`);
+          row.append(debugCanvas);
+          const [lo, hi] = want.bird.pointiness;
+          pass = bird.pointiness >= lo && bird.pointiness <= hi;
+          detail = `pointiness ${bird.pointiness} (want ${lo}–${hi}) · area ${bird.area} · ${bird.polygon.length} vertices`;
+        } else {
         const { level, debugCanvas, warnings, timings } = await parseFort(`./${f.image}`);
         row.append(debugCanvas);
         if (want.error) {
@@ -64,6 +71,7 @@
           pass = c.pass;
           detail = `${c.summary} · ${Math.round(timings.total)} ms`;
           lines = [...c.missing.map((m) => `missing ${m}`), ...c.extra.map((e) => `extra ${e}`), ...warnings];
+        }
         }
       } catch (err) {
         if (err.debugCanvas) row.append(err.debugCanvas);

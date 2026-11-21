@@ -22,5 +22,26 @@
     "image": "synthetic-no-pig.svg",
     "expected": "synthetic-no-pig.expected.json",
     "note": "No green pig: must fail with a friendly error"
+  },
+  {
+    "name": "bird-round",
+    "type": "bird",
+    "image": "bird-round.svg",
+    "expected": "bird-round.expected.json",
+    "note": "Round blob: heavy, not pointy"
+  },
+  {
+    "name": "bird-triangle",
+    "type": "bird",
+    "image": "bird-triangle.svg",
+    "expected": "bird-triangle.expected.json",
+    "note": "Triangle: medium pointy"
+  },
+  {
+    "name": "bird-star",
+    "type": "bird",
+    "image": "bird-star.svg",
+    "expected": "bird-star.expected.json",
+    "note": "Star: very pointy"
   }
 ]
