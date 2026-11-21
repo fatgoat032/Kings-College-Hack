@@ -7,6 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
 import { EVENTS, ROLES } from '../src/shared/events.js';
 import { createRoom } from './room.js';
+import { createClaude } from './claude.js';
+
+// ANTHROPIC_API_KEY (and optional CLAUDE_MODEL) come from .env in the repo root, never from the browser.
+try {
+  process.loadEnvFile(fileURLToPath(new URL('../.env', import.meta.url)));
+} catch {
+  /* no .env: scanning falls back to OpenCV */
+}
 
 const PORT = Number(process.env.SERVER_PORT || 3000);
 const DIST = fileURLToPath(new URL('../dist', import.meta.url));
@@ -21,6 +29,8 @@ const app = express();
 app.use(express.static(DIST)); // production build (npm start); in dev Vite serves the pages
 app.get('/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/info', (_req, res) => res.json({ lanIps: lanIps() }));
+const claude = createClaude();
+app.use('/api', claude.router); // /api/classify, /api/layout, /api/claude/status
 
 const http = createServer(app);
 // fort photos: 1280 px JPEG at q 0.85, ~0.3-1.5 MB as base64; over this limit socket.io drops the client silently
@@ -48,6 +58,10 @@ io.on('connection', (socket) => {
   function apply(fx, event, payload) {
     for (const f of fx) {
       if (f.type === 'relay') io.to(`${room.code}:${ROLES.DISPLAY}`).emit(event, payload);
+      else if (f.type === 'toPlayer') {
+        const sid = owners.get(`${room.code}:${f.id}`);
+        if (sid) io.to(sid).emit(event, payload);
+      }
       else if (f.type === 'phase') {
         log(room.code, 'phase ->', room.state().phase);
         io.to(room.code).emit(EVENTS.PHASE, { phase: room.state().phase });
@@ -95,6 +109,8 @@ io.on('connection', (socket) => {
   });
   on(EVENTS.LEVEL_READY, (id, p) => room.levelReady(id, p));
   on(EVENTS.AIM, (id) => room.aim(id));
+  on(EVENTS.GRIP, (id) => room.grip(id));
+  on(EVENTS.POWER_UPDATE, (id) => room.powerUpdate(id));
   on(EVENTS.LAUNCH, (id) => room.launch(id));
   on(EVENTS.ABILITY, (id) => room.ability(id));
   on(EVENTS.SHOT_DONE, (id, p) => room.shotDone(id, p));
@@ -121,4 +137,5 @@ setInterval(() => {
 
 http.listen(PORT, () => {
   console.log(`socket server on :${PORT}  (LAN: ${lanIps().join(', ') || 'none'})`);
+  console.log(claude.enabled ? `Claude scanning on (${claude.model})` : 'Claude scanning off: no ANTHROPIC_API_KEY in .env (OpenCV only)');
 });
