@@ -1,0 +1,31 @@
+:root { --ink: #2b2622; --paper: #fbf7ec; --bg: #e8e1d0; --a: #d8322b; --b: #2f6fd6; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font: 20px system-ui, sans-serif; }
+#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+.overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; background: rgba(232, 225, 208, 0.94); }
+.overlay[hidden], #hud[hidden] { display: none; }
+h1 { margin: 0; font-size: 72px; letter-spacing: 1px; }
+.join { display: flex; gap: 40px; align-items: center; background: var(--paper); padding: 28px 36px; border: 4px solid var(--ink); border-radius: 18px; }
+.join p { margin: 4px 0; font-size: 24px; }
+#joinUrl { font: 700 22px ui-monospace, monospace; }
+#code { font-size: 120px; font-weight: 900; letter-spacing: 18px; line-height: 1; }
+#qr { width: 280px; height: 280px; image-rendering: pixelated; }
+.rosters { display: flex; gap: 40px; min-height: 120px; }
+.rosters ul { list-style: none; margin: 0; padding: 12px 20px; min-width: 260px; border: 3px solid; border-radius: 14px; background: var(--paper); }
+.rosters ul::before { display: block; font-weight: 800; margin-bottom: 6px; }
+.rosters .A { border-color: var(--a); } .rosters .A::before { content: 'Team A'; color: var(--a); }
+.rosters .B { border-color: var(--b); } .rosters .B::before { content: 'Team B'; color: var(--b); }
+.rosters li.off { opacity: 0.4; }
+button { font: 700 26px system-ui, sans-serif; padding: 14px 28px; border: 4px solid var(--ink); border-radius: 14px; background: #fff; color: var(--ink); cursor: pointer; }
+button:disabled { opacity: 0.4; cursor: default; }
+#hud { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; pointer-events: none; font-size: 26px; }
+#hud .team { font-weight: 800; }
+#hud .A { color: var(--a); } #hud .B { color: var(--b); margin-right: 150px; }
+#phaseText { font-weight: 800; background: var(--paper); padding: 6px 18px; border: 3px solid var(--ink); border-radius: 12px; }
+#mini { position: fixed; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: center; font: 800 18px ui-monospace, monospace; background: var(--paper); padding: 6px; border-radius: 8px; }
+#miniQr { width: 90px; height: 90px; }
+.card { inset: auto; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 32px 48px; border: 4px solid var(--ink); border-radius: 18px; background: var(--paper); max-width: 70vw; text-align: center; gap: 14px; }
+.card h2 { margin: 0; font-size: 48px; }
+.card p { margin: 0; font-size: 26px; }
+#cardButtons { display: flex; gap: 16px; }
+#log { position: fixed; left: 8px; bottom: 8px; max-height: 40vh; max-width: 50vw; overflow: auto; margin: 0; padding: 8px; font: 12px ui-monospace, monospace; background: rgba(255, 255, 255, 0.9); }
