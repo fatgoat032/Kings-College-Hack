@@ -23,7 +23,8 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/info', (_req, res) => res.json({ lanIps: lanIps() }));
 
 const http = createServer(app);
-const io = new Server(http, { maxHttpBufferSize: 5e6 }); // fort photos are a few hundred KB
+// fort photos: 1280 px JPEG at q 0.85, ~0.3-1.5 MB as base64; over this limit socket.io drops the client silently
+const io = new Server(http, { maxHttpBufferSize: 1e7 });
 
 /** code -> room */
 const rooms = new Map();
