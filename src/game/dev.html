@@ -15,22 +15,36 @@
 </head>
 <body>
   <canvas id="game"></canvas>
-  <div id="help">Drag back from the slingshot and release · arrows aim, space fires · 1/2/3 sample forts · 0 empty · M mute</div>
+  <!-- dev keys (hidden): drag the slingshot, arrows + space, 1/2/3 forts, 0 empty, P photo reveal, W winner, T summary, M mute -->
   <script type="module">
     import { createGame } from './index.js';
-    import { sampleLevels } from '../shared/level.js';
 
     const game = createGame(document.getElementById('game'));
     window.game = game;
+    const levels = game.sampleLevels;
     game.on('shotDone', (d) => console.log('shotDone', d));
     game.on('levelError', (d) => console.warn('levelError', d.errors));
-    game.loadLevel(sampleLevels[0]);
+    game.setTeam('A');
+    game.loadLevel(levels[0]);
 
-    let muted = false;
-    window.addEventListener('keydown', (e) => {
-      if (e.key >= '1' && e.key <= String(sampleLevels.length)) game.loadLevel(sampleLevels[+e.key - 1]);
+    window.addEventListener('keydown', async (e) => {
+      if (e.key >= '1' && e.key <= String(levels.length)) game.loadLevel(levels[+e.key - 1]);
       if (e.key === '0') game.reset();
-      if (e.key === 'm' || e.key === 'M') game.setMuted((muted = !muted));
+      if (e.key === 't' || e.key === 'T') game.showTurnSummary({ team: 'A', blobs: game.getState().knocked, birds: game.getState().birdsUsed });
+      if (e.key === 'w' || e.key === 'W') game.showWinner({ winner: 'A', blobs: { A: 5, B: 3 }, birds: { A: 3, B: 3 } }, () => game.loadLevel(levels[0]));
+      if (e.key === 'p' || e.key === 'P') {
+        // photo reveal using a vision fixture
+        const { parseFort, ready } = await import('../vision/parseFort.js');
+        if (ready) await ready();
+        const img = new Image();
+        img.src = '/fixtures/synthetic-flat.svg';
+        await img.decode();
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth || 1280; c.height = img.naturalHeight || 900;
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const res = await parseFort(img);
+        game.loadLevel(res.level, { photo: c.toDataURL('image/jpeg', 0.85), page: res.page });
+      }
     });
   </script>
 </body>

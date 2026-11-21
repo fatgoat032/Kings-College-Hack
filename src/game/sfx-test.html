@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sound Test</title>
+  <style>
+    body {
+      margin: 0; padding: 16px; font: 16px/1.4 system-ui, sans-serif; color: #223;
+      background: #fdfcf6 repeating-linear-gradient(transparent 0 27px, #cfe0f3 27px 28px);
+    }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    .bar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+    button {
+      font: inherit; padding: 10px 8px; border: 2px solid #223; border-radius: 6px;
+      background: #fff; cursor: pointer; box-shadow: 2px 2px 0 #223;
+    }
+    button:active { transform: translate(2px, 2px); box-shadow: none; }
+    button.hit { background: #fff4d6; }
+    h2 { font-size: 16px; margin: 20px 0 8px; }
+    #log { margin-top: 16px; font: 13px ui-monospace, monospace; color: #556; min-height: 1.4em; }
+  </style>
+</head>
+<body>
+  <h1>Angry Sketches sound test</h1>
+  <div class="bar">
+    <label>force <input id="force" type="range" min="0" max="1" step="0.05" value="0.5" />
+      <output id="forceOut">0.50</output></label>
+    <label><input id="mute" type="checkbox" /> mute</label>
+  </div>
+
+  <div class="grid" id="presets"></div>
+
+  <h2>Specials</h2>
+  <div class="grid">
+    <button id="whistleOn">startWhistle</button>
+    <button id="whistleOff">stopWhistle</button>
+    <button id="collapse">collapse (10 hits)</button>
+  </div>
+  <div class="bar" style="margin-top: 12px">
+    <label>stretch power (drag) <input id="stretch" type="range" min="0" max="1" step="0.01" value="0" /></label>
+  </div>
+  <div id="log"></div>
+
+  <script type="module">
+    import { createSfx, PRESETS } from './sfx.js';
+
+    const sfx = createSfx();
+    window.sfx = sfx;
+    window.PRESETS = PRESETS;
+    const $ = (id) => document.getElementById(id);
+    const force = () => +$('force').value;
+    const log = (msg) => { $('log').textContent = msg; };
+
+    // Unlock on the first gesture.
+    addEventListener('pointerdown', () => sfx.unlock(), { capture: true });
+    addEventListener('keydown', () => sfx.unlock(), { capture: true });
+
+    const names = Object.keys(PRESETS).filter((n) => n !== 'stretch' && n !== 'whistle');
+    window.PRESET_NAMES = names;
+    for (const name of names) {
+      const b = document.createElement('button');
+      b.textContent = name;
+      if (PRESETS[name].hit) b.className = 'hit';
+      b.onclick = () => { sfx.unlock(); sfx.play(name, { force: force() }); log(`play('${name}', { force: ${force()} })`); };
+      $('presets').append(b);
+    }
+
+    $('force').oninput = () => { $('forceOut').textContent = force().toFixed(2); };
+    $('mute').onchange = (e) => { sfx.setMuted(e.target.checked); log(`muted: ${sfx.isMuted()}`); };
+    $('whistleOn').onclick = () => { sfx.unlock(); sfx.startWhistle(); };
+    $('whistleOff').onclick = () => sfx.stopWhistle();
+    $('stretch').oninput = (e) => { sfx.unlock(); sfx.stretch(+e.target.value); };
+    $('stretch').onchange = () => { sfx.play('launch', { force: +$('stretch').value }); $('stretch').value = 0; };
+    $('collapse').onclick = () => {
+      sfx.unlock();
+      const hits = ['hitWood', 'hitStone', 'hitIce', 'tear', 'crumple', 'hitWood', 'hitGround', 'tear', 'hitStone', 'crumple'];
+      hits.forEach((h, i) => setTimeout(() => sfx.play(h, { force: Math.random() }), i * 25));
+      sfx.play('rumble', { force: .8 });
+      log('collapse: 10 hits in 250 ms (max 4 per 120 ms play)');
+    };
+  </script>
+</body>
+</html>
