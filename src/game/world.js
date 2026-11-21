@@ -1,6 +1,6 @@
 // Physics and rules. No drawing and no DOM here, so it can be tested in Node.
 import Matter from 'matter-js';
-import { validateLevel, clampPigR } from '../shared/level.js';
+import { validateLevel, clampPigR, polygonCentroid } from '../shared/level.js';
 import {
   WORLD, MATERIALS, MASS_FACTOR, SCRAPS, TNT, BIRD, PIG, TIMING,
   SHOTS, SHOT_ORDER, SHOT_ALIASES,
@@ -30,8 +30,18 @@ function extents(b) {
 // apart by the physics engine, so the fort jumps on load. This stacks each
 // block exactly on whatever it was drawn resting on (bottom-up), and sits each
 // blob on the surface under it. Positions only move by the overlap or gap.
+// Poly blocks (shape 'poly', vertices in world units) are fitted by their
+// bounding box; the vertices move with it.
+function asBox(b) {
+  if (b.shape !== 'poly' || !Array.isArray(b.vertices)) return { ...b };
+  const xs = b.vertices.map((v) => v[0]);
+  const ys = b.vertices.map((v) => v[1]);
+  const x1 = Math.min(...xs), x2 = Math.max(...xs), y1 = Math.min(...ys), y2 = Math.max(...ys);
+  return { ...b, x: (x1 + x2) / 2, y: (y1 + y2) / 2, w: Math.max(4, x2 - x1), h: Math.max(4, y2 - y1), angle: 0, _y0: (y1 + y2) / 2 };
+}
+
 export function fitLevel(level, pigScale = 1) {
-  const blocks = level.blocks.map((b) => ({ ...b }));
+  const blocks = level.blocks.map(asBox);
   const order = [...blocks].sort((a, b) => (b.y + extents(b).hh) - (a.y + extents(a).hh));
   const placed = [];
   const supportUnder = (x, hw, y, hh) => {
@@ -49,6 +59,10 @@ export function fitLevel(level, pigScale = 1) {
   for (const b of order) {
     const { hw, hh } = extents(b);
     b.y = supportUnder(b.x, hw, b.y, hh) - hh;
+    if (b.shape === 'poly' && b._y0 !== undefined) {
+      const dy = b.y - b._y0;
+      b.vertices = b.vertices.map(([x, y]) => [x, y + dy]);
+    }
     placed.push(b);
   }
   const pigs = level.pigs.map((p) => {
@@ -165,13 +179,30 @@ export function createWorld() {
     const fitted = fitLevel(level, PIG.sizeBoost);
     for (const b of fitted.blocks) {
       const m = MATERIALS[b.material];
-      const body = Bodies.rectangle(b.x, b.y, b.w, b.h, {
+      const opts = {
         angle: b.angle || 0, density: m.density, friction: m.friction, frictionStatic: 1,
         restitution: m.restitution, label: 'block',
-      });
+      };
+      let body = null;
+      let verts = null;
+      if (b.shape === 'poly') {
+        // Without poly-decomp, Matter uses the convex hull for concave outlines: fine for a drawn block.
+        try {
+          const [cx, cy] = polygonCentroid(b.vertices);
+          body = Bodies.fromVertices(cx, cy, [b.vertices.map(([x, y]) => ({ x, y }))], { ...opts, angle: 0 });
+        } catch {
+          body = null;
+        }
+        if (body && body.vertices && body.vertices.length >= 3) {
+          verts = body.vertices.map((v) => ({ x: v.x - body.position.x, y: v.y - body.position.y }));
+        } else {
+          body = null;
+        }
+      }
+      if (!body) body = Bodies.rectangle(b.x, b.y, b.w, b.h, opts);
       Composite.add(engine.world, body);
       const src = level.blocks.find((o) => o.id === b.id) || b; // original position, for photo textures
-      w.blocks.set(body.id, { body, material: b.material, w: b.w, h: b.h, id: b.id, hp: m.hp, maxHp: m.hp, cracked: false, src });
+      w.blocks.set(body.id, { body, material: b.material, w: b.w, h: b.h, id: b.id, hp: m.hp, maxHp: m.hp, cracked: false, src, verts });
     }
     for (const p of fitted.pigs) {
       const r = clampPigR(p.r) * PIG.sizeBoost;

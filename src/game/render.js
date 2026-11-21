@@ -467,13 +467,24 @@ export function createRenderer(canvas, world, hooks = {}) {
       ctx.scale(sc, sc);
       ctx.globalAlpha = lift;
     }
+    const shapePath = () => {
+      ctx.beginPath();
+      if (block.verts) {
+        block.verts.forEach((v, i) => (i ? ctx.lineTo(v.x, v.y) : ctx.moveTo(v.x, v.y)));
+        ctx.closePath();
+      } else ctx.rect(-w / 2, -h / 2, w, h);
+    };
     ctx.fillStyle = s.fill;
-    ctx.fillRect(-w / 2, -h / 2, w, h);
+    shapePath();
+    ctx.fill();
+    ctx.save();
+    shapePath();
+    ctx.clip();
     drawTexture(block, w, h);
+    ctx.restore();
 
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(-w / 2, -h / 2, w, h);
+    shapePath();
     ctx.clip();
     ctx.strokeStyle = s.hatch;
     ctx.lineWidth = 1.4;
@@ -499,7 +510,13 @@ export function createRenderer(canvas, world, hooks = {}) {
 
     ctx.strokeStyle = s.stroke;
     ctx.lineWidth = 2.6;
-    wobblyRect(ctx, w, h, rand);
+    if (block.verts) {
+      const vs = block.verts;
+      for (let i = 0; i < vs.length; i++) {
+        const a = vs[i], c = vs[(i + 1) % vs.length];
+        wobblyLine(ctx, a.x, a.y, c.x, c.y, rand);
+      }
+    } else wobblyRect(ctx, w, h, rand);
 
     if (block.cracked) {
       // zigzag crack, fixed per block
@@ -534,7 +551,12 @@ export function createRenderer(canvas, world, hooks = {}) {
   function drawTexture(block, w, h) {
     if (!reveal || !reveal.page || !reveal.map || !block.src) return;
     const { sx, sy, ox, oy } = reveal.map;
-    const src = block.src;
+    let src = block.src;
+    if (src.shape === 'poly' && Array.isArray(src.vertices)) {
+      const xs = src.vertices.map((v) => v[0]), ys = src.vertices.map((v) => v[1]);
+      const x1 = Math.min(...xs), x2 = Math.max(...xs), y1 = Math.min(...ys), y2 = Math.max(...ys);
+      src = { x: (x1 + x2) / 2, y: (y1 + y2) / 2, w: x2 - x1, h: y2 - y1 };
+    }
     const px = (src.x - src.w / 2 - ox) / sx;
     const py = (src.y - src.h / 2 - oy) / sy;
     const pw = src.w / sx;
@@ -911,7 +933,7 @@ export function createRenderer(canvas, world, hooks = {}) {
   function snapshot() {
     return {
       blocks: [...world.blocks.values()].map((b) => ({
-        k: b.body.id, material: b.material, w: b.w, h: b.h, cracked: b.cracked, src: b.src,
+        k: b.body.id, material: b.material, w: b.w, h: b.h, cracked: b.cracked, src: b.src, verts: b.verts,
         x: b.body.position.x, y: b.body.position.y, angle: b.body.angle,
       })),
       pigs: [...world.pigs.values()].map((p) => ({
